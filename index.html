@@ -22,21 +22,21 @@
 
           <nav
             aria-label="Story categories"
-            class="hn-nav-scroll flex items-center"
+            class="min-w-0 overflow-x-auto flex items-center"
           >
-            <a class="hn-nav-item is-active" href="#">top</a>
-            <span class="hn-nav-separator">|</span>
-            <a class="hn-nav-item" href="#">new</a>
-            <span class="hn-nav-separator">|</span>
-            <a class="hn-nav-item" href="#">best</a>
-            <span class="hn-nav-separator">|</span>
-            <a class="hn-nav-item" href="#">ask</a>
-            <span class="hn-nav-separator">|</span>
-            <a class="hn-nav-item" href="#">show</a>
-            <span class="hn-nav-separator">|</span>
-            <a class="hn-nav-item" href="#">jobs</a>
-            <span class="hn-nav-separator">|</span>
-            <a class="hn-nav-item" href="#">submit</a>
+            <a class="whitespace-nowrap font-mono text-xs font-bold text-primary" href="#">top</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap font-mono text-xs text-muted-foreground transition-colors hover:text-foreground" href="#">new</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap font-mono text-xs text-muted-foreground transition-colors hover:text-foreground" href="#">best</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap font-mono text-xs text-muted-foreground transition-colors hover:text-foreground" href="#">ask</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap font-mono text-xs text-muted-foreground transition-colors hover:text-foreground" href="#">show</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap font-mono text-xs text-muted-foreground transition-colors hover:text-foreground" href="#">jobs</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap font-mono text-xs text-muted-foreground transition-colors hover:text-foreground" href="#">submit</a>
           </nav>
 
           <a
@@ -50,64 +50,97 @@
       <main class="mx-auto w-full max-w-4xl px-4 py-4">
         <section aria-label="Stories" class="py-2">
           <article class="group flex items-baseline gap-2 py-1.5">
-            <span class="hn-rank">1.</span>
+            <span
+              class="w-7 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground/40"
+              >1.</span
+            >
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-baseline gap-1.5">
-                <a href="#" class="hn-story-link"
+                <a
+                  href="#"
+                  class="text-sm leading-snug text-foreground transition-colors hover:text-primary"
                   >Building a tiny feed reader that feels instant</a
                 >
-                <span class="hn-domain">(example.dev)</span>
+                <span class="font-mono text-xs text-muted-foreground/60"
+                  >(example.dev)</span
+                >
               </div>
-              <p class="hn-meta">
+              <p
+                class="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-xs text-muted-foreground/70"
+              >
                 <span>238 pts</span>
-                <span class="hn-meta-sep">|</span>
+                <span class="text-muted-foreground/30">|</span>
                 <span>by chase</span>
-                <span class="hn-meta-sep">|</span>
+                <span class="text-muted-foreground/30">|</span>
                 <span>2 hours ago</span>
-                <span class="hn-meta-sep">|</span>
-                <a href="#" class="hn-comments-link">67 comments</a>
+                <span class="text-muted-foreground/30">|</span>
+                <a href="#" class="transition-colors hover:text-primary"
+                  >67 comments</a
+                >
               </p>
             </div>
           </article>
 
           <article class="group flex items-baseline gap-2 py-1.5">
-            <span class="hn-rank">2.</span>
+            <span
+              class="w-7 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground/40"
+              >2.</span
+            >
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-baseline gap-1.5">
-                <a href="#" class="hn-story-link"
+                <a
+                  href="#"
+                  class="text-sm leading-snug text-foreground transition-colors hover:text-primary"
                   >Ask HN: What design choices keep your UIs readable?</a
                 >
-                <span class="hn-domain">(news.ycombinator.com)</span>
+                <span class="font-mono text-xs text-muted-foreground/60"
+                  >(news.ycombinator.com)</span
+                >
               </div>
-              <p class="hn-meta">
+              <p
+                class="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-xs text-muted-foreground/70"
+              >
                 <span>112 pts</span>
-                <span class="hn-meta-sep">|</span>
+                <span class="text-muted-foreground/30">|</span>
                 <span>by wingbuilder</span>
-                <span class="hn-meta-sep">|</span>
+                <span class="text-muted-foreground/30">|</span>
                 <span>5 hours ago</span>
-                <span class="hn-meta-sep">|</span>
-                <a href="#" class="hn-comments-link">49 comments</a>
+                <span class="text-muted-foreground/30">|</span>
+                <a href="#" class="transition-colors hover:text-primary"
+                  >49 comments</a
+                >
               </p>
             </div>
           </article>
 
           <article class="group flex items-baseline gap-2 py-1.5">
-            <span class="hn-rank">3.</span>
+            <span
+              class="w-7 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground/40"
+              >3.</span
+            >
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-baseline gap-1.5">
-                <a href="#" class="hn-story-link"
+                <a
+                  href="#"
+                  class="text-sm leading-snug text-foreground transition-colors hover:text-primary"
                   >Show HN: A local-first notes app with plain text sync</a
                 >
-                <span class="hn-domain">(github.com)</span>
+                <span class="font-mono text-xs text-muted-foreground/60"
+                  >(github.com)</span
+                >
               </div>
-              <p class="hn-meta">
+              <p
+                class="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-xs text-muted-foreground/70"
+              >
                 <span>94 pts</span>
-                <span class="hn-meta-sep">|</span>
+                <span class="text-muted-foreground/30">|</span>
                 <span>by fernway</span>
-                <span class="hn-meta-sep">|</span>
+                <span class="text-muted-foreground/30">|</span>
                 <span>8 hours ago</span>
-                <span class="hn-meta-sep">|</span>
-                <a href="#" class="hn-comments-link">21 comments</a>
+                <span class="text-muted-foreground/30">|</span>
+                <a href="#" class="transition-colors hover:text-primary"
+                  >21 comments</a
+                >
               </p>
             </div>
           </article>

@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+:root {
+  --background: #121212;
+  --foreground: #c8c8c8;
+  --card: #181818;
+  --card-foreground: #c8c8c8;
+  --popover: #181818;
+  --popover-foreground: #c8c8c8;
+  --primary: #3d88c5;
+  --primary-foreground: #e8e8e8;
+  --secondary: #1e1e1e;
+  --secondary-foreground: #b0b0b0;
+  --muted: #1e1e1e;
+  --muted-foreground: #777;
+  --accent: #3d88c5;
+  --accent-foreground: #e8e8e8;
+  --destructive: #c53d3d;
+  --destructive-foreground: #e8e8e8;
+  --border: #2a2a2a;
+  --input: #2a2a2a;
+  --ring: #3d88c5;
+  --radius: 0.25rem;
+}
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback";
+  --font-mono: "Geist Mono", "Geist Mono Fallback";
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
