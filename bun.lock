@@ -1,0 +1,19 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "dependencies": {
+        "@fontsource/roboto-mono": "^5.2.8",
+      },
+      "devDependencies": {
+        "tailwindcss": "^4.2.1",
+      },
+    },
+  },
+  "packages": {
+    "@fontsource/roboto-mono": ["@fontsource/roboto-mono@5.2.8", "", {}, "sha512-M0XPRcvkOKiTPooXwX7yJSNpuad3CPcQwsADBfnopz3apBs+VKI47pc42mlvAxJjNTRauu5rndSxHc8F52bR7Q=="],
+
+    "tailwindcss": ["tailwindcss@4.2.1", "", {}, "sha512-/tBrSQ36vCleJkAOsy9kbNTgaxvGbyOamC30PRePTQe/o1MFwEKHQk4Cn7BNGaPtjp+PuUrByJehM1hgxfq4sw=="],
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@fontsource/roboto-mono": "^5.2.8"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.2.1"
+  }
+}

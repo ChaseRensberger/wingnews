@@ -3,5 +3,3 @@ sandbox/
 wingnews
 node_modules/
 output.css
-bun.lock
-package.json
