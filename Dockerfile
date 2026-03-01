@@ -1,11 +1,11 @@
-FROM node:20-alpine AS css
+FROM oven/bun:1.2.22-alpine AS css
 WORKDIR /app
 
 COPY package.json bun.lock input.css index.html ./
 COPY templates ./templates
 
-RUN npm install
-RUN npm run css:build
+RUN bun install --frozen-lockfile
+RUN bun run css:build
 
 FROM golang:1.25-alpine AS builder
 WORKDIR /app
