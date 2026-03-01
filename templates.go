@@ -23,7 +23,7 @@ func newServer() *server {
 	return &server{
 		hn:            newHNClient(),
 		tmpl:          tmpl,
-		commentsCache: newMemoryCache(),
+		commentsCache: newCommentsMemoryCache(),
 	}
 }
 

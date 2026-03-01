@@ -22,7 +22,7 @@ func newHNClient() *hnClient {
 	return &hnClient{
 		http:  &http.Client{Timeout: 6 * time.Second},
 		base:  "https://hacker-news.firebaseio.com/v0",
-		cache: newMemoryCache(),
+		cache: newHNMemoryCache(),
 	}
 }
 
