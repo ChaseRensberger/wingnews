@@ -42,15 +42,18 @@ type storyView struct {
 }
 
 type commentView struct {
-	ID       int
-	By       string
-	Created  int64
-	TimeAgo  string
-	Text     template.HTML
-	Depth    int
-	Deleted  bool
-	Dead     bool
-	Children []*commentView
+	ID              int
+	By              string
+	Created         int64
+	TimeAgo         string
+	Text            template.HTML
+	Depth           int
+	Deleted         bool
+	Dead            bool
+	Children        []*commentView
+	HasMoreChildren bool
+	HiddenChildren  int
+	ExpandPath      string
 }
 
 type feedPageData struct {
@@ -87,6 +90,7 @@ type layoutData struct {
 }
 
 type server struct {
-	hn   *hnClient
-	tmpl *template.Template
+	hn            *hnClient
+	tmpl          *template.Template
+	commentsCache *memoryCache
 }

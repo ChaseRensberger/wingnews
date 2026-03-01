@@ -21,8 +21,9 @@ func newServer() *server {
 	))
 
 	return &server{
-		hn:   newHNClient(),
-		tmpl: tmpl,
+		hn:            newHNClient(),
+		tmpl:          tmpl,
+		commentsCache: newMemoryCache(),
 	}
 }
 

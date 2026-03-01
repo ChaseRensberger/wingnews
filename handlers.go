@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"html/template"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -73,7 +77,7 @@ func (s *server) handleItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sortMode := parseSort(r.URL.Query().Get("sort"))
-	comments, commentsErr := s.loadComments(r.Context(), item.Kids, sortMode)
+	comments, commentsErr := s.loadComments(r.Context(), item.ID, item.Kids, sortMode)
 
 	data := itemPageData{
 		Story:         toStoryView(item, 0),
@@ -101,7 +105,7 @@ func (s *server) handleItemComments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sortMode := parseSort(r.URL.Query().Get("sort"))
-	comments, commentsErr := s.loadComments(r.Context(), item.Kids, sortMode)
+	comments, commentsErr := s.loadComments(r.Context(), item.ID, item.Kids, sortMode)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "comments", map[string]any{
@@ -113,33 +117,202 @@ func (s *server) handleItemComments(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) loadComments(ctx context.Context, ids []int, sortMode string) ([]*commentView, string) {
-	remaining := 350
-	comments := s.buildCommentTree(ctx, ids, 0, &remaining)
+func (s *server) handleCommentChildren(w http.ResponseWriter, r *http.Request) {
+	storyID, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	commentID, err := strconv.Atoi(chi.URLParam(r, "commentID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	parentDepth := parsePositiveInt(r.URL.Query().Get("depth"), 1)
+	sortMode := parseSort(r.URL.Query().Get("sort"))
+
+	children, childrenErr := s.loadCommentChildren(r.Context(), storyID, commentID, parentDepth, sortMode)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "commentChildren", map[string]any{
+		"Comments":      children,
+		"CommentsError": childrenErr,
+	}); err != nil {
+		http.Error(w, "template render failed", http.StatusInternalServerError)
+	}
+}
+
+func (s *server) loadComments(ctx context.Context, storyID int, ids []int, sortMode string) ([]*commentView, string) {
+	cacheKey := fmt.Sprintf("comment-tree:%d:%s", storyID, sortMode)
+	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 45*time.Second, func(ctx context.Context) (any, error) {
+		comments, commentsErr := s.loadCommentsFresh(ctx, storyID, ids, sortMode, 0)
+		return struct {
+			Comments []*commentView
+			Error    string
+		}{Comments: comments, Error: commentsErr}, nil
+	})
+	if err != nil {
+		return nil, "Unable to load comments right now."
+	}
+
+	payload, _ := value.(struct {
+		Comments []*commentView
+		Error    string
+	})
+	return payload.Comments, payload.Error
+}
+
+func (s *server) loadCommentChildren(ctx context.Context, storyID, commentID, parentDepth int, sortMode string) ([]*commentView, string) {
+	cacheKey := fmt.Sprintf("comment-children:%d:%d:%d:%s", storyID, commentID, parentDepth, sortMode)
+	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 45*time.Second, func(ctx context.Context) (any, error) {
+		parent, err := s.hn.getItem(ctx, commentID)
+		if err != nil || parent == nil {
+			return struct {
+				Comments []*commentView
+				Error    string
+			}{Error: "Unable to load replies right now."}, nil
+		}
+
+		children, childrenErr := s.loadCommentsFresh(ctx, storyID, parent.Kids, sortMode, parentDepth)
+		return struct {
+			Comments []*commentView
+			Error    string
+		}{Comments: children, Error: childrenErr}, nil
+	})
+	if err != nil {
+		return nil, "Unable to load replies right now."
+	}
+
+	payload, _ := value.(struct {
+		Comments []*commentView
+		Error    string
+	})
+	return payload.Comments, payload.Error
+}
+
+func (s *server) loadCommentsFresh(ctx context.Context, storyID int, ids []int, sortMode string, baseDepth int) ([]*commentView, string) {
+	const maxNodes = 350
+	const eagerDepth = 2
+
+	itemsByID, truncated := s.fetchCommentItems(ctx, ids, maxNodes)
+	comments := s.buildCommentTree(ids, itemsByID, baseDepth, baseDepth+eagerDepth, storyID, sortMode)
 	if sortMode == "new" {
 		sortCommentsByNewest(comments)
 	}
 
-	if remaining == 0 {
-		return comments, "Comment tree is truncated for faster rendering."
+	if truncated {
+		return comments, "Some comments were deferred for faster rendering."
 	}
 	return comments, ""
 }
 
-func (s *server) buildCommentTree(ctx context.Context, ids []int, depth int, remaining *int) []*commentView {
-	if len(ids) == 0 || *remaining <= 0 {
+func (s *server) fetchCommentItems(ctx context.Context, ids []int, maxNodes int) (map[int]*hnItem, bool) {
+	if len(ids) == 0 || maxNodes <= 0 {
+		return map[int]*hnItem{}, false
+	}
+
+	workers := 24
+	if maxNodes < workers {
+		workers = maxNodes
+	}
+
+	itemsByID := make(map[int]*hnItem, maxNodes)
+	seen := make(map[int]struct{}, maxNodes)
+	jobs := make(chan int, workers*2)
+	done := make(chan struct{})
+	var doneOnce sync.Once
+
+	var mu sync.Mutex
+	var workerWG sync.WaitGroup
+
+	scheduled := 0
+	truncated := false
+	pending := int64(0)
+
+	enqueue := func(id int) {
+		if id <= 0 {
+			return
+		}
+
+		mu.Lock()
+		if _, exists := seen[id]; exists {
+			mu.Unlock()
+			return
+		}
+		if scheduled >= maxNodes {
+			truncated = true
+			mu.Unlock()
+			return
+		}
+		seen[id] = struct{}{}
+		scheduled++
+		mu.Unlock()
+
+		atomic.AddInt64(&pending, 1)
+
+		select {
+		case <-ctx.Done():
+			if atomic.AddInt64(&pending, -1) == 0 {
+				doneOnce.Do(func() { close(done) })
+			}
+		case jobs <- id:
+		}
+	}
+
+	for range workers {
+		workerWG.Add(1)
+		go func() {
+			defer workerWG.Done()
+			for id := range jobs {
+				item, err := s.hn.getItem(ctx, id)
+				if err == nil && item != nil && item.Type == "comment" {
+					mu.Lock()
+					itemsByID[id] = item
+					mu.Unlock()
+
+					for _, kidID := range item.Kids {
+						enqueue(kidID)
+					}
+				}
+				if atomic.AddInt64(&pending, -1) == 0 {
+					doneOnce.Do(func() { close(done) })
+				}
+			}
+		}()
+	}
+
+	for _, id := range ids {
+		enqueue(id)
+	}
+	if atomic.LoadInt64(&pending) == 0 {
+		doneOnce.Do(func() { close(done) })
+	}
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+	close(jobs)
+	workerWG.Wait()
+
+	if ctx.Err() != nil {
+		truncated = true
+	}
+
+	return itemsByID, truncated
+}
+
+func (s *server) buildCommentTree(ids []int, itemsByID map[int]*hnItem, depth, depthLimit, storyID int, sortMode string) []*commentView {
+	if len(ids) == 0 {
 		return nil
 	}
 
 	out := make([]*commentView, 0, len(ids))
 	for _, id := range ids {
-		if *remaining <= 0 {
-			break
-		}
-		*remaining--
-
-		item, err := s.hn.getItem(ctx, id)
-		if err != nil || item.Type != "comment" {
+		item, ok := itemsByID[id]
+		if !ok || item == nil || item.Type != "comment" {
 			continue
 		}
 
@@ -153,7 +326,22 @@ func (s *server) buildCommentTree(ctx context.Context, ids []int, depth int, rem
 			Deleted: item.Deleted,
 			Dead:    item.Dead,
 		}
-		node.Children = s.buildCommentTree(ctx, item.Kids, depth+1, remaining)
+
+		if len(item.Kids) > 0 {
+			if depth+1 >= depthLimit {
+				node.HasMoreChildren = true
+				node.HiddenChildren = len(item.Kids)
+				node.ExpandPath = fmt.Sprintf("/item/%d/comment/%d/children?sort=%s&depth=%d", storyID, item.ID, sortMode, depth+1)
+			} else {
+				node.Children = s.buildCommentTree(item.Kids, itemsByID, depth+1, depthLimit, storyID, sortMode)
+				if len(node.Children) < len(item.Kids) {
+					node.HasMoreChildren = true
+					node.HiddenChildren = len(item.Kids) - len(node.Children)
+					node.ExpandPath = fmt.Sprintf("/item/%d/comment/%d/children?sort=%s&depth=%d", storyID, item.ID, sortMode, depth+1)
+				}
+			}
+		}
+
 		out = append(out, node)
 	}
 

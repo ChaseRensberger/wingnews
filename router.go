@@ -26,6 +26,7 @@ func newRouter(s *server) http.Handler {
 	r.Get("/jobs", s.handleFeed("jobs", "/jobs", "Jobs"))
 	r.Get("/item/{id}", s.handleItem)
 	r.Get("/item/{id}/comments", s.handleItemComments)
+	r.Get("/item/{id}/comment/{commentID}/children", s.handleCommentChildren)
 	r.Get("/user/{id}", s.handleUser)
 	r.Get("/submit", s.handleSubmit)
 
