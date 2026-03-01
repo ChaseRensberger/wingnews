@@ -1,0 +1,30 @@
+{{define "comments"}}
+{{if .CommentsError}}<p class="rounded-sm border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">{{.CommentsError}}</p>{{end}}
+{{if .Comments}}
+  <div class="space-y-2">
+  {{range .Comments}}
+    {{template "commentNode" .}}
+  {{end}}
+  </div>
+{{else}}
+  <p class="text-sm text-muted-foreground">No comments yet.</p>
+{{end}}
+{{end}}
+
+{{define "commentNode"}}
+<article class="border-l border-border pl-2" style="margin-left: {{mul .Depth 14}}px;">
+  <p class="mb-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70"><a href="/user/{{.By}}" class="transition-colors hover:text-primary">{{.By}}</a><span class="text-muted-foreground/30">|</span><span>{{.TimeAgo}}</span></p>
+  {{if or .Deleted .Dead}}
+    <p class="text-xs text-muted-foreground/80">[deleted]</p>
+  {{else}}
+    <div class="text-xs leading-relaxed text-foreground/90">{{.Text}}</div>
+  {{end}}
+  {{if .Children}}
+    <div class="mt-2 space-y-2">
+      {{range .Children}}
+        {{template "commentNode" .}}
+      {{end}}
+    </div>
+  {{end}}
+</article>
+{{end}}

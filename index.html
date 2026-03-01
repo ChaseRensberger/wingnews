@@ -1,200 +1,50 @@
+{{define "layout"}}
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WingNews</title>
-    <link href="./output.css" rel="stylesheet" />
+    <title>{{if .Title}}{{.Title}} | {{end}}WingNews</title>
+    <link rel="icon" type="image/png" href="/public/WingmanBlue.png" />
+    <link href="/output.css" rel="stylesheet" />
+    <script src="https://unpkg.com/htmx.org@2.0.7"></script>
   </head>
   <body class="bg-background text-foreground antialiased">
     <div class="min-h-screen">
       <header class="border-b border-border bg-card">
         <div class="mx-auto flex w-full max-w-4xl items-center gap-3 px-4 py-3">
-          <a href="#" class="mr-1 flex shrink-0 items-center gap-2">
-            <span
-              class="bg-primary px-1.5 py-0.5 text-xs font-bold text-primary-foreground"
-              >W</span
-            >
+          <a href="/" class="mr-1 flex shrink-0 items-center gap-2">
+            <img src="/public/WingmanBlue.png" alt="WingNews logo" class="h-5 w-5 rounded-sm object-contain" />
             <span class="text-sm font-bold tracking-tight">WingNews</span>
           </a>
 
-          <nav
-            aria-label="Story categories"
-            class="min-w-0 overflow-x-auto flex items-center"
-          >
-            <a class="whitespace-nowrap text-xs font-bold text-primary" href="#"
-              >top</a
-            >
-            <span class="mx-1 select-none text-xs text-muted-foreground/30"
-              >|</span
-            >
-            <a
-              class="whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
-              href="#"
-              >new</a
-            >
-            <span class="mx-1 select-none text-xs text-muted-foreground/30"
-              >|</span
-            >
-            <a
-              class="whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
-              href="#"
-              >best</a
-            >
-            <span class="mx-1 select-none text-xs text-muted-foreground/30"
-              >|</span
-            >
-            <a
-              class="whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
-              href="#"
-              >ask</a
-            >
-            <span class="mx-1 select-none text-xs text-muted-foreground/30"
-              >|</span
-            >
-            <a
-              class="whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
-              href="#"
-              >show</a
-            >
-            <span class="mx-1 select-none text-xs text-muted-foreground/30"
-              >|</span
-            >
-            <a
-              class="whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
-              href="#"
-              >jobs</a
-            >
-            <span class="mx-1 select-none text-xs text-muted-foreground/30"
-              >|</span
-            >
-            <a
-              class="whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
-              href="#"
-              >submit</a
-            >
+          <nav aria-label="Story categories" class="flex min-w-0 items-center overflow-x-auto">
+            <a class="whitespace-nowrap text-xs {{if eq .Active "top"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/">top</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap text-xs {{if eq .Active "new"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/new">new</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap text-xs {{if eq .Active "best"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/best">best</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap text-xs {{if eq .Active "ask"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/ask">ask</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap text-xs {{if eq .Active "show"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/show">show</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap text-xs {{if eq .Active "jobs"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/jobs">jobs</a>
           </nav>
         </div>
       </header>
 
-      <main class="mx-auto w-full max-w-4xl px-4 py-4">
-        <section aria-label="Stories" class="py-2">
-          <article class="group flex items-baseline gap-2 py-1.5">
-            <span
-              class="w-7 shrink-0 text-right text-xs tabular-nums text-muted-foreground/40"
-              >1.</span
-            >
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-baseline gap-1.5">
-                <a
-                  href="#"
-                  class="font-sans text-sm leading-snug text-foreground transition-colors hover:text-primary"
-                  >Building a tiny feed reader that feels instant</a
-                >
-                <span class="text-xs text-muted-foreground/60"
-                  >(example.dev)</span
-                >
-              </div>
-              <p
-                class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70"
-              >
-                <span>238 pts</span>
-                <span class="text-muted-foreground/30">|</span>
-                <span>by chase</span>
-                <span class="text-muted-foreground/30">|</span>
-                <span>2 hours ago</span>
-                <span class="text-muted-foreground/30">|</span>
-                <a href="#" class="transition-colors hover:text-primary"
-                  >67 comments</a
-                >
-              </p>
-            </div>
-          </article>
-
-          <article class="group flex items-baseline gap-2 py-1.5">
-            <span
-              class="w-7 shrink-0 text-right text-xs tabular-nums text-muted-foreground/40"
-              >2.</span
-            >
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-baseline gap-1.5">
-                <a
-                  href="#"
-                  class="text-sm leading-snug text-foreground transition-colors hover:text-primary"
-                  >Ask HN: What design choices keep your UIs readable?</a
-                >
-                <span class="text-xs text-muted-foreground/60"
-                  >(news.ycombinator.com)</span
-                >
-              </div>
-              <p
-                class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70"
-              >
-                <span>112 pts</span>
-                <span class="text-muted-foreground/30">|</span>
-                <span>by wingbuilder</span>
-                <span class="text-muted-foreground/30">|</span>
-                <span>5 hours ago</span>
-                <span class="text-muted-foreground/30">|</span>
-                <a href="#" class="transition-colors hover:text-primary"
-                  >49 comments</a
-                >
-              </p>
-            </div>
-          </article>
-
-          <article class="group flex items-baseline gap-2 py-1.5">
-            <span
-              class="w-7 shrink-0 text-right text-xs tabular-nums text-muted-foreground/40"
-              >3.</span
-            >
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-baseline gap-1.5">
-                <a
-                  href="#"
-                  class="text-sm leading-snug text-foreground transition-colors hover:text-primary"
-                  >Show HN: A local-first notes app with plain text sync</a
-                >
-                <span class="text-xs text-muted-foreground/60"
-                  >(github.com)</span
-                >
-              </div>
-              <p
-                class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70"
-              >
-                <span>94 pts</span>
-                <span class="text-muted-foreground/30">|</span>
-                <span>by fernway</span>
-                <span class="text-muted-foreground/30">|</span>
-                <span>8 hours ago</span>
-                <span class="text-muted-foreground/30">|</span>
-                <a href="#" class="transition-colors hover:text-primary"
-                  >21 comments</a
-                >
-              </p>
-            </div>
-          </article>
-        </section>
-      </main>
+      <main id="content" class="mx-auto w-full max-w-4xl px-4 py-4">{{.Content}}</main>
 
       <footer class="border-t border-border py-4">
-        <div
-          class="mx-auto w-full max-w-4xl px-4 text-xs text-muted-foreground/50"
-        >
+        <div class="mx-auto w-full max-w-4xl px-4 text-xs text-muted-foreground/50">
           powered by
-          <a
-            href="https://github.com/HackerNews/API"
-            class="text-muted-foreground/70 hover:text-primary"
-            >hn/api</a
-          >
+          <a href="https://github.com/HackerNews/API" class="text-muted-foreground/70 hover:text-primary">hn/api</a>
           //
-          <a
-            href="https://news.ycombinator.com"
-            class="text-muted-foreground/70 hover:text-primary"
-            >news.ycombinator.com</a
-          >
+          <a href="https://news.ycombinator.com" class="text-muted-foreground/70 hover:text-primary">news.ycombinator.com</a>
         </div>
       </footer>
     </div>
   </body>
 </html>
+{{end}}

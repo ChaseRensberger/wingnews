@@ -1,0 +1,37 @@
+{{define "item"}}
+<article class="space-y-4 py-2">
+  <header class="space-y-1">
+    <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground/70">
+      <a href="/" class="transition-colors hover:text-primary">top</a>
+      <span class="text-muted-foreground/30">|</span>
+      <span>item {{.Story.ID}}</span>
+    </div>
+    <h1 class="text-base font-bold leading-tight text-foreground">{{.Story.Title}}</h1>
+    <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70">
+      {{if gt .Story.Score 0}}<span>{{.Story.Score}} points</span><span class="text-muted-foreground/30">|</span>{{end}}
+      <a href="/user/{{.Story.By}}" class="transition-colors hover:text-primary">{{.Story.By}}</a>
+      <span class="text-muted-foreground/30">|</span>
+      <span>{{.Story.TimeAgo}}</span>
+      {{if .Story.DisplayURL}}<span class="text-muted-foreground/30">|</span><a href="{{.Story.DisplayURL}}" class="transition-colors hover:text-primary">{{.Story.Domain}}</a>{{end}}
+    </p>
+  </header>
+
+  {{if .Text}}
+  <section class="text-sm leading-relaxed text-foreground/90">{{.Text}}</section>
+  {{end}}
+
+  <section class="space-y-2 border-t border-border pt-3">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="text-sm font-semibold">{{.Story.CommentsText}}</h2>
+      <form class="flex items-center gap-2 text-xs" hx-get="/item/{{.Story.ID}}/comments" hx-target="#comments" hx-swap="innerHTML" hx-trigger="change">
+        <span class="text-muted-foreground/70">order</span>
+        <select name="sort" class="rounded-sm border border-input bg-background px-1.5 py-1 text-xs">
+          <option value="hn" {{if eq .Sort "hn"}}selected{{end}}>hn</option>
+          <option value="new" {{if eq .Sort "new"}}selected{{end}}>newest</option>
+        </select>
+      </form>
+    </div>
+    <div id="comments">{{template "comments" .}}</div>
+  </section>
+</article>
+{{end}}

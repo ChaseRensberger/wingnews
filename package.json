@@ -1,8 +1,13 @@
 {
+  "scripts": {
+    "css:build": "tailwindcss -i input.css -o output.css",
+    "css:watch": "tailwindcss -i input.css -o output.css --watch"
+  },
   "dependencies": {
     "@fontsource/roboto-mono": "^5.2.8"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.2.1",
     "tailwindcss": "^4.2.1"
   }
 }
