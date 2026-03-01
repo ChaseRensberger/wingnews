@@ -1,7 +1,9 @@
 @import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap");
 
 :root {
-  font-family: "Roboto Mono", system-ui;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
   color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -62,5 +64,11 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .article-title {
+    font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
 }
