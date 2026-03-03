@@ -193,7 +193,7 @@ func (s *server) loadCommentChildren(ctx context.Context, storyID, commentID, pa
 }
 
 func (s *server) loadCommentsFresh(ctx context.Context, storyID int, ids []int, sortMode string, baseDepth int) ([]*commentView, string) {
-	const maxNodes = 350
+	const maxNodes = 200
 	const eagerDepth = 2
 
 	itemsByID, truncated := s.fetchCommentItems(ctx, ids, maxNodes)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 )
 
 func newRouter(s *server) http.Handler {
@@ -13,8 +14,10 @@ func newRouter(s *server) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Logger)
 	r.Use(middleware.Timeout(8 * time.Second))
+	r.Use(httprate.LimitByRealIP(100, time.Minute))
+
+	r.Get("/robots.txt", handleRobotsTxt)
 
 	r.Handle("/output.css", http.FileServer(http.Dir(".")))
 	r.Handle("/public/*", http.StripPrefix("/public/", http.FileServer(http.Dir("public"))))
@@ -31,4 +34,14 @@ func newRouter(s *server) http.Handler {
 	r.Get("/submit", s.handleSubmit)
 
 	return r
+}
+
+const robotsTxt = `User-agent: *
+Crawl-delay: 10
+Disallow: /item/
+`
+
+func handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte(robotsTxt))
 }
