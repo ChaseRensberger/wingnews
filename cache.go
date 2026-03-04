@@ -20,7 +20,7 @@ type inflightCall struct {
 }
 
 type memoryCache struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	entries  map[string]*cacheEntry
 	inflight map[string]*inflightCall
 	lru      *list.List
@@ -60,8 +60,27 @@ func newMemoryCache(maxEntries int, cleanupInterval time.Duration) *memoryCache 
 func (c *memoryCache) getOrLoad(ctx context.Context, key string, ttl time.Duration, loader func(context.Context) (any, error)) (any, error) {
 	now := time.Now()
 
-	c.mu.Lock()
+	// Fast path: read lock for cache hits (most common case).
+	c.mu.RLock()
 	entry, hasEntry := c.entries[key]
+	if hasEntry && now.Before(entry.expiresAt) {
+		value := entry.value
+		c.mu.RUnlock()
+		// Promote in LRU under write lock (cheap, non-blocking for other readers).
+		c.mu.Lock()
+		if entry.element != nil {
+			c.lru.MoveToFront(entry.element)
+		}
+		c.mu.Unlock()
+		return value, nil
+	}
+	c.mu.RUnlock()
+
+	// Slow path: write lock for cache misses and inflight dedup.
+	c.mu.Lock()
+
+	// Double-check after acquiring write lock.
+	entry, hasEntry = c.entries[key]
 	if hasEntry && now.Before(entry.expiresAt) {
 		c.lru.MoveToFront(entry.element)
 		value := entry.value
@@ -148,12 +167,19 @@ func (c *memoryCache) enforceCapacityLocked() {
 	}
 }
 
-func (c *memoryCache) cleanupExpiredLocked(now time.Time) {
+// collectExpiredKeys gathers expired keys under a read lock, avoiding
+// holding the write lock during a full map scan.
+func (c *memoryCache) collectExpiredKeys(now time.Time) []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var expired []string
 	for key, entry := range c.entries {
 		if now.After(entry.expiresAt) {
-			c.removeEntryLocked(key)
+			expired = append(expired, key)
 		}
 	}
+	return expired
 }
 
 func (c *memoryCache) startJanitor() {
@@ -162,9 +188,19 @@ func (c *memoryCache) startJanitor() {
 
 	for range ticker.C {
 		now := time.Now()
-		c.mu.Lock()
-		c.cleanupExpiredLocked(now)
-		c.enforceCapacityLocked()
-		c.mu.Unlock()
+
+		// Collect expired keys under read lock, then delete under write lock.
+		expired := c.collectExpiredKeys(now)
+		if len(expired) > 0 {
+			c.mu.Lock()
+			for _, key := range expired {
+				// Re-check expiry — entry may have been refreshed between collect and delete.
+				if entry, exists := c.entries[key]; exists && now.After(entry.expiresAt) {
+					c.removeEntryLocked(key)
+				}
+			}
+			c.enforceCapacityLocked()
+			c.mu.Unlock()
+		}
 	}
 }

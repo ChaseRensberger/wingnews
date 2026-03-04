@@ -63,6 +63,8 @@ func (s *server) handleFeed(feed, path, title string) http.HandlerFunc {
 	}
 }
 
+const topLevelPageSize = 20
+
 func (s *server) handleItem(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -77,7 +79,8 @@ func (s *server) handleItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sortMode := parseSort(r.URL.Query().Get("sort"))
-	comments, commentsErr := s.loadComments(r.Context(), item.ID, item.Kids, sortMode)
+	pageIDs, remaining := paginateIDs(item.Kids, 0, topLevelPageSize)
+	comments, commentsErr := s.loadComments(r.Context(), item.ID, pageIDs, sortMode, 0)
 
 	data := itemPageData{
 		Story:         toStoryView(item, 0),
@@ -86,6 +89,11 @@ func (s *server) handleItem(w http.ResponseWriter, r *http.Request) {
 		Sort:          sortMode,
 		CommentsError: commentsErr,
 		TotalComments: len(comments),
+	}
+	if remaining > 0 {
+		data.HasMoreComments = true
+		data.RemainingComments = remaining
+		data.LoadMorePath = fmt.Sprintf("/item/%d/more-comments?sort=%s&offset=%d", item.ID, sortMode, topLevelPageSize)
 	}
 
 	s.render(w, r, "", item.Title, "item", data)
@@ -105,14 +113,22 @@ func (s *server) handleItemComments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sortMode := parseSort(r.URL.Query().Get("sort"))
-	comments, commentsErr := s.loadComments(r.Context(), item.ID, item.Kids, sortMode)
+	pageIDs, remaining := paginateIDs(item.Kids, 0, topLevelPageSize)
+	comments, commentsErr := s.loadComments(r.Context(), item.ID, pageIDs, sortMode, 0)
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "comments", map[string]any{
+	data := map[string]any{
 		"Comments":      comments,
 		"Sort":          sortMode,
 		"CommentsError": commentsErr,
-	}); err != nil {
+	}
+	if remaining > 0 {
+		data["HasMoreComments"] = true
+		data["RemainingComments"] = remaining
+		data["LoadMorePath"] = fmt.Sprintf("/item/%d/more-comments?sort=%s&offset=%d", item.ID, sortMode, topLevelPageSize)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "comments", data); err != nil {
 		http.Error(w, "template render failed", http.StatusInternalServerError)
 	}
 }
@@ -144,8 +160,42 @@ func (s *server) handleCommentChildren(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) loadComments(ctx context.Context, storyID int, ids []int, sortMode string) ([]*commentView, string) {
-	cacheKey := fmt.Sprintf("comment-tree:%d:%s", storyID, sortMode)
+func (s *server) handleMoreComments(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	item, err := s.hn.getItem(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	offset := parsePositiveInt(r.URL.Query().Get("offset"), 0)
+	sortMode := parseSort(r.URL.Query().Get("sort"))
+	pageIDs, remaining := paginateIDs(item.Kids, offset, topLevelPageSize)
+	comments, commentsErr := s.loadComments(r.Context(), item.ID, pageIDs, sortMode, offset)
+
+	data := map[string]any{
+		"Comments":      comments,
+		"CommentsError": commentsErr,
+	}
+	if remaining > 0 {
+		data["HasMoreComments"] = true
+		data["RemainingComments"] = remaining
+		data["LoadMorePath"] = fmt.Sprintf("/item/%d/more-comments?sort=%s&offset=%d", item.ID, sortMode, offset+topLevelPageSize)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := s.tmpl.ExecuteTemplate(w, "moreComments", data); err != nil {
+		http.Error(w, "template render failed", http.StatusInternalServerError)
+	}
+}
+
+func (s *server) loadComments(ctx context.Context, storyID int, ids []int, sortMode string, offset int) ([]*commentView, string) {
+	cacheKey := fmt.Sprintf("comment-tree:%d:%s:%d", storyID, sortMode, offset)
 	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 45*time.Second, func(ctx context.Context) (any, error) {
 		comments, commentsErr := s.loadCommentsFresh(ctx, storyID, ids, sortMode, 0)
 		return struct {
@@ -196,15 +246,12 @@ func (s *server) loadCommentsFresh(ctx context.Context, storyID int, ids []int, 
 	const maxNodes = 50
 	const eagerDepth = 2
 
-	itemsByID, truncated := s.fetchCommentItems(ctx, ids, maxNodes)
+	itemsByID, _ := s.fetchCommentItems(ctx, ids, maxNodes)
 	comments := s.buildCommentTree(ids, itemsByID, baseDepth, baseDepth+eagerDepth, storyID, sortMode)
 	if sortMode == "new" {
 		sortCommentsByNewest(comments)
 	}
 
-	if truncated {
-		return comments, "Some comments were deferred for faster rendering."
-	}
 	return comments, ""
 }
 

@@ -1,9 +1,19 @@
 {{define "comments"}}
 {{if .CommentsError}}<p class="rounded-sm border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">{{.CommentsError}}</p>{{end}}
 {{if .Comments}}
-  <div class="space-y-2">
+  <div id="comments-list" class="space-y-2">
   {{range .Comments}}
     {{template "commentNode" .}}
+  {{end}}
+  {{if .HasMoreComments}}
+    <button
+      class="w-full rounded-sm border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      hx-get="{{.LoadMorePath}}"
+      hx-target="this"
+      hx-swap="outerHTML"
+    >
+      load more comments{{if gt .RemainingComments 0}} ({{.RemainingComments}} remaining){{end}}
+    </button>
   {{end}}
   </div>
 {{else}}
@@ -13,31 +23,37 @@
 
 {{define "commentNode"}}
 <article class="border-l border-border pl-2" style="margin-left: {{mul .Depth 14}}px;">
-  <p class="mb-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70"><a href="/user/{{.By}}" class="transition-colors hover:text-primary">{{.By}}</a><span class="text-muted-foreground/30">|</span><span>{{.TimeAgo}}</span></p>
-  {{if or .Deleted .Dead}}
-    <p class="text-xs text-muted-foreground/80">[deleted]</p>
-  {{else}}
-    <div class="text-xs leading-relaxed text-foreground/90">{{.Text}}</div>
-  {{end}}
-  {{if or .Children .HasMoreChildren}}
-    <div class="comment-children mt-2 space-y-2">
-      {{if .Children}}
-        {{range .Children}}
-          {{template "commentNode" .}}
+  <details class="group" open>
+    <summary class="mb-1 flex cursor-pointer list-none flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70 [&::-webkit-details-marker]:hidden">
+      <span class="select-none text-muted-foreground/40 group-open:hidden hover:text-foreground">[+]</span>
+      <span class="hidden select-none text-muted-foreground/40 group-open:inline hover:text-foreground">[-]</span>
+      <a href="/user/{{.By}}" class="transition-colors hover:text-primary" onclick="event.stopPropagation()">{{.By}}</a><span class="text-muted-foreground/30">|</span><span>{{.TimeAgo}}</span>
+    </summary>
+    {{if or .Deleted .Dead}}
+      <p class="text-xs text-muted-foreground/80">[deleted]</p>
+    {{else}}
+      <div class="text-xs leading-relaxed text-foreground/90">{{.Text}}</div>
+    {{end}}
+    {{if or .Children .HasMoreChildren}}
+      <div class="comment-children mt-2 space-y-2">
+        {{if .Children}}
+          {{range .Children}}
+            {{template "commentNode" .}}
+          {{end}}
         {{end}}
-      {{end}}
-      {{if .HasMoreChildren}}
-        <button
-          class="rounded-sm border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          hx-get="{{.ExpandPath}}"
-          hx-target="closest .comment-children"
-          hx-swap="innerHTML"
-        >
-          load replies{{if gt .HiddenChildren 0}} ({{.HiddenChildren}}){{end}}
-        </button>
-      {{end}}
-    </div>
-  {{end}}
+        {{if .HasMoreChildren}}
+          <button
+            class="rounded-sm border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            hx-get="{{.ExpandPath}}"
+            hx-target="closest .comment-children"
+            hx-swap="innerHTML"
+          >
+            load replies{{if gt .HiddenChildren 0}} ({{.HiddenChildren}}){{end}}
+          </button>
+        {{end}}
+      </div>
+    {{end}}
+  </details>
 </article>
 {{end}}
 
@@ -51,5 +67,22 @@
   </div>
 {{else}}
   <p class="text-xs text-muted-foreground">No replies to show.</p>
+{{end}}
+{{end}}
+
+{{define "moreComments"}}
+{{if .CommentsError}}<p class="rounded-sm border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">{{.CommentsError}}</p>{{end}}
+{{range .Comments}}
+  {{template "commentNode" .}}
+{{end}}
+{{if .HasMoreComments}}
+  <button
+    class="w-full rounded-sm border border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+    hx-get="{{.LoadMorePath}}"
+    hx-target="this"
+    hx-swap="outerHTML"
+  >
+    load more comments{{if gt .RemainingComments 0}} ({{.RemainingComments}} remaining){{end}}
+  </button>
 {{end}}
 {{end}}

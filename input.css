@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap");
+
+/* Fonts are loaded via <link> tags in index.html to avoid CSS @import waterfall */
 
 :root {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,

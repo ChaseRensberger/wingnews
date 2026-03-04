@@ -66,12 +66,15 @@ type feedPageData struct {
 }
 
 type itemPageData struct {
-	Story         storyView
-	Text          template.HTML
-	Comments      []*commentView
-	Sort          string
-	CommentsError string
-	TotalComments int
+	Story             storyView
+	Text              template.HTML
+	Comments          []*commentView
+	Sort              string
+	CommentsError     string
+	TotalComments     int
+	HasMoreComments   bool
+	RemainingComments int
+	LoadMorePath      string
 }
 
 type userPageData struct {
