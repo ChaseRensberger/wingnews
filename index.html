@@ -27,7 +27,7 @@
             <span class="text-sm font-bold tracking-tight">WingNews</span>
           </a>
 
-          <nav aria-label="Story categories" class="flex min-w-0 items-center overflow-x-auto">
+          <nav aria-label="Story categories" class="flex min-w-0 flex-1 items-center overflow-x-auto">
             <a class="whitespace-nowrap text-xs {{if eq .Active "top"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/">top</a>
             <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
             <a class="whitespace-nowrap text-xs {{if eq .Active "new"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/new">new</a>
@@ -40,6 +40,15 @@
             <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
             <a class="whitespace-nowrap text-xs {{if eq .Active "jobs"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/jobs">jobs</a>
           </nav>
+
+          <a
+            href="{{.GitHubURL}}"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="ml-auto whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            GitHub{{if .GitHubStars}} <span class="font-semibold text-foreground">[{{.GitHubStars}}]</span>{{end}}
+          </a>
         </div>
       </header>
 

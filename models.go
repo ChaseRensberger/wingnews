@@ -87,13 +87,16 @@ type userPageData struct {
 }
 
 type layoutData struct {
-	Title   string
-	Active  string
-	Content template.HTML
+	Title       string
+	Active      string
+	Content     template.HTML
+	GitHubURL   string
+	GitHubStars string
 }
 
 type server struct {
 	hn            *hnClient
+	github        *githubClient
 	tmpl          *template.Template
 	commentsCache *memoryCache
 }

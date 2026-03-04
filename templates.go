@@ -22,6 +22,7 @@ func newServer() *server {
 
 	return &server{
 		hn:            newHNClient(),
+		github:        newGitHubClient(githubRepo),
 		tmpl:          tmpl,
 		commentsCache: newCommentsMemoryCache(),
 	}
@@ -41,9 +42,13 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, active, title, b
 	}
 
 	layout := layoutData{
-		Title:   title,
-		Active:  active,
-		Content: template.HTML(body.String()),
+		Title:     title,
+		Active:    active,
+		Content:   template.HTML(body.String()),
+		GitHubURL: "https://github.com/" + githubRepo,
+	}
+	if stars, err := s.github.getRepoStars(r.Context()); err == nil {
+		layout.GitHubStars = formatStarCount(stars)
 	}
 	if err := s.tmpl.ExecuteTemplate(w, "layout", layout); err != nil {
 		http.Error(w, "template render failed", http.StatusInternalServerError)
