@@ -72,4 +72,10 @@
   .article-title {
     font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
+
+  .comment-body pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
 }

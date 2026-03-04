@@ -32,7 +32,7 @@
     {{if or .Deleted .Dead}}
       <p class="text-xs text-muted-foreground/80">[deleted]</p>
     {{else}}
-      <div class="text-xs leading-relaxed text-foreground/90">{{.Text}}</div>
+      <div class="comment-body text-xs leading-relaxed text-foreground/90">{{.Text}}</div>
     {{end}}
     {{if or .Children .HasMoreChildren}}
       <div class="comment-children mt-2 space-y-2">
