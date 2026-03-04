@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: wingnews
+    runtime: docker
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    envVars: []

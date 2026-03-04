@@ -3,14 +3,20 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
+	}
+
 	s := newServer()
 	r := newRouter(s)
 
-	log.Println("wingnews listening on :3000")
-	if err := http.ListenAndServe(":3000", r); err != nil {
+	log.Println("wingnews listening on :" + port)
+	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
 	}
 }
