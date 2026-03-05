@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "WingNews Opener",
+  "version": "0.1.0",
+  "description": "Open Hacker News item pages in WingNews.",
+  "permissions": [
+    "contextMenus",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://news.ycombinator.com/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://news.ycombinator.com/item?id=*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "WingmanBlue.png"
+      ],
+      "matches": [
+        "https://news.ycombinator.com/*"
+      ]
+    }
+  ],
+  "action": {
+    "default_title": "Open in WingNews"
+  }
+}
