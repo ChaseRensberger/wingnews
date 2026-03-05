@@ -4,15 +4,6 @@ A fast, dark-mode Hacker News reader built with Go and HTMX.
 
 Live at [news.wingman.actor](https://news.wingman.actor)
 
-## Features
-
-- **All HN feeds** -- Top, New, Best, Ask, Show, and Jobs
-- **Threaded comments** -- collapsible via native `<details>` elements, with lazy-loaded nested replies
-- **Comment sorting** -- sort by newest, oldest, or most replies
-- **User profiles** -- view user info and recent submissions
-- **Dark mode** -- forced dark color scheme with a monospace (JetBrains Mono) aesthetic
-- **No client-side JS** -- HTMX handles comment loading and sorting; everything else is plain HTML links
-
 ## Development
 
 ### Prerequisites
