@@ -13,6 +13,7 @@ type hnItem struct {
 	Text        string `json:"text"`
 	URL         string `json:"url"`
 	Score       int    `json:"score"`
+	Parent      int    `json:"parent"`
 	Descendants int    `json:"descendants"`
 	Kids        []int  `json:"kids"`
 	Deleted     bool   `json:"deleted"`
@@ -77,13 +78,34 @@ type itemPageData struct {
 	LoadMorePath      string
 }
 
+type userCommentView struct {
+	ID      int
+	By      string
+	TimeAgo string
+	Text    template.HTML
+	OnTitle string // title of the root story
+	OnID    int    // ID of the root story
+}
+
 type userPageData struct {
 	ID         string
 	Karma      int
 	CreatedAgo string
 	About      template.HTML
-	Submitted  []storyView
-	Error      string
+}
+
+type userSubmissionsPageData struct {
+	UserID  string
+	Stories []storyView
+	Page    int
+	HasMore bool
+}
+
+type userCommentsPageData struct {
+	UserID   string
+	Comments []userCommentView
+	Page     int
+	HasMore  bool
 }
 
 type layoutData struct {

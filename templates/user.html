@@ -2,28 +2,103 @@
 <section class="space-y-4 py-2">
   <header>
     <h1 class="text-base font-bold text-foreground">user: {{.ID}}</h1>
-    <p class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70">{{.Karma}} karma <span class="text-muted-foreground/30">|</span> created {{.CreatedAgo}}</p>
+    <p class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70">
+      {{.Karma}} karma
+      <span class="text-muted-foreground/30">|</span>
+      created {{.CreatedAgo}}
+    </p>
   </header>
 
-  {{if .About}}<article class="text-sm leading-relaxed text-foreground/90">{{.About}}</article>{{end}}
+  {{if .About}}
+    <article class="text-sm leading-relaxed text-foreground/90">{{.About}}</article>
+  {{end}}
 
-  <section class="space-y-2 border-t border-border pt-3">
-    <h2 class="text-sm font-semibold text-foreground">recent submissions</h2>
-    {{if .Submitted}}
-      {{range .Submitted}}
-      <article class="group flex items-baseline gap-2 py-1.5">
-        <div class="min-w-0 flex-1">
-          <div class="flex flex-wrap items-baseline gap-1.5">
-            <a href="{{.URL}}" class="article-title text-sm leading-snug text-foreground transition-colors hover:text-primary">{{.Title}}</a>
-            {{if .DisplayURL}}<span class="text-xs text-muted-foreground/60">({{.Domain}})</span>{{end}}
-          </div>
-          <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70">{{if gt .Score 0}}<span>{{.Score}} pts</span><span class="text-muted-foreground/30">|</span>{{end}}<span>{{.TimeAgo}}</span><span class="text-muted-foreground/30">|</span><a href="/item/{{.ID}}" class="transition-colors hover:text-primary">{{.CommentsText}}</a></p>
+  <nav class="flex flex-wrap items-center gap-1.5 border-t border-border pt-3 text-sm">
+    <a href="/user/{{.ID}}/submissions" class="text-primary transition-colors hover:text-primary/80">submissions</a>
+    <span class="text-muted-foreground/30">|</span>
+    <a href="/user/{{.ID}}/comments" class="text-primary transition-colors hover:text-primary/80">comments</a>
+    <span class="text-muted-foreground/30">|</span>
+    <a href="https://news.ycombinator.com/favorites?id={{.ID}}" class="text-primary transition-colors hover:text-primary/80" target="_blank" rel="noopener noreferrer">favorites</a>
+  </nav>
+</section>
+{{end}}
+
+{{define "userSubmissions"}}
+<section class="space-y-3 py-2">
+  <header>
+    <h1 class="text-base font-bold text-foreground"><a href="/user/{{.UserID}}" class="transition-colors hover:text-primary">{{.UserID}}</a>'s submissions</h1>
+  </header>
+
+  {{if .Stories}}
+    {{range .Stories}}
+    <article class="group flex items-baseline gap-2 py-1.5">
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-baseline gap-1.5">
+          <a href="{{.URL}}" class="article-title text-sm leading-snug text-foreground transition-colors hover:text-primary">{{.Title}}</a>
+          {{if .DisplayURL}}<span class="text-xs text-muted-foreground/60">({{.Domain}})</span>{{end}}
         </div>
-      </article>
-      {{end}}
-    {{else}}
-    <p class="text-xs text-muted-foreground/80">No submitted items available.</p>
+        <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70">
+          {{if gt .Score 0}}<span>{{.Score}} pts</span><span class="text-muted-foreground/30">|</span>{{end}}
+          <span>{{.TimeAgo}}</span>
+          <span class="text-muted-foreground/30">|</span>
+          <a href="/item/{{.ID}}" class="transition-colors hover:text-primary">{{.CommentsText}}</a>
+        </p>
+      </div>
+    </article>
     {{end}}
-  </section>
+  {{else}}
+    <p class="text-xs text-muted-foreground/80">No submissions found.</p>
+  {{end}}
+
+  <div class="flex items-center justify-between">
+    <span class="text-xs text-muted-foreground/80">page {{.Page}}</span>
+    <div class="flex gap-2">
+      {{if gt .Page 1}}
+      <a class="rounded-sm border border-border bg-secondary px-2 py-1 text-xs text-secondary-foreground hover:bg-muted" href="/user/{{.UserID}}/submissions?page={{dec .Page}}">newer</a>
+      {{end}}
+      {{if .HasMore}}
+      <a class="rounded-sm bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90" href="/user/{{.UserID}}/submissions?page={{inc .Page}}">more</a>
+      {{end}}
+    </div>
+  </div>
+</section>
+{{end}}
+
+{{define "userComments"}}
+<section class="space-y-3 py-2">
+  <header>
+    <h1 class="text-base font-bold text-foreground"><a href="/user/{{.UserID}}" class="transition-colors hover:text-primary">{{.UserID}}</a>'s comments</h1>
+  </header>
+
+  {{if .Comments}}
+    {{range .Comments}}
+    <article class="border-l border-border pl-3 py-2">
+      <p class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70">
+        <a href="/user/{{.By}}" class="transition-colors hover:text-primary">{{.By}}</a>
+        <span class="text-muted-foreground/30">|</span>
+        <span>{{.TimeAgo}}</span>
+        {{if .OnTitle}}
+          <span class="text-muted-foreground/30">|</span>
+          <span>on: <a href="/item/{{.OnID}}" class="transition-colors hover:text-primary">{{.OnTitle}}</a></span>
+        {{end}}
+      </p>
+      <div class="comment-body mt-1 text-xs leading-relaxed text-foreground/90">{{.Text}}</div>
+    </article>
+    {{end}}
+  {{else}}
+    <p class="text-xs text-muted-foreground/80">No comments found.</p>
+  {{end}}
+
+  <div class="flex items-center justify-between">
+    <span class="text-xs text-muted-foreground/80">page {{.Page}}</span>
+    <div class="flex gap-2">
+      {{if gt .Page 1}}
+      <a class="rounded-sm border border-border bg-secondary px-2 py-1 text-xs text-secondary-foreground hover:bg-muted" href="/user/{{.UserID}}/comments?page={{dec .Page}}">newer</a>
+      {{end}}
+      {{if .HasMore}}
+      <a class="rounded-sm bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90" href="/user/{{.UserID}}/comments?page={{inc .Page}}">more</a>
+      {{end}}
+    </div>
+  </div>
 </section>
 {{end}}

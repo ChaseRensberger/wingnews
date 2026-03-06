@@ -40,6 +40,8 @@ func newRouter(s *server) http.Handler {
 		r.Get("/item/{id}/more-comments", s.handleMoreComments)
 		r.Get("/item/{id}/comment/{commentID}/children", s.handleCommentChildren)
 		r.Get("/user/{id}", s.handleUser)
+		r.Get("/user/{id}/submissions", s.handleUserSubmissions)
+		r.Get("/user/{id}/comments", s.handleUserComments)
 		r.Get("/submit", s.handleSubmit)
 	})
 

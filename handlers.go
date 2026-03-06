@@ -408,26 +408,183 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := 20
-	if len(user.Submitted) < limit {
-		limit = len(user.Submitted)
-	}
-
-	items := s.hn.hydrateStories(r.Context(), user.Submitted[:limit])
-	submitted := make([]storyView, 0, limit)
-	for _, item := range items {
-		if item == nil {
-			continue
-		}
-		submitted = append(submitted, toStoryView(item, 0))
-	}
-
 	s.render(w, r, "", "user: "+user.ID, "user", userPageData{
 		ID:         user.ID,
 		Karma:      user.Karma,
 		CreatedAgo: timeAgo(user.Created),
 		About:      template.HTML(user.About),
-		Submitted:  submitted,
+	})
+}
+
+const userPageSize = 20
+
+// filterSubmittedIDs hydrates items from the user's Submitted list in batches,
+// filtering by type. It skips items that don't match the filter and continues
+// fetching until it has enough items or runs out of IDs.
+func (s *server) filterSubmittedIDs(ctx context.Context, submitted []int, offset int, limit int, keep func(*hnItem) bool) ([]*hnItem, bool) {
+	const batchSize = 50
+	result := make([]*hnItem, 0, limit)
+	pos := offset
+
+	for len(result) < limit && pos < len(submitted) {
+		end := pos + batchSize
+		if end > len(submitted) {
+			end = len(submitted)
+		}
+
+		items := s.hn.hydrateStories(ctx, submitted[pos:end])
+		for _, item := range items {
+			if item == nil || item.Deleted || item.Dead {
+				continue
+			}
+			if keep(item) {
+				result = append(result, item)
+				if len(result) >= limit {
+					break
+				}
+			}
+		}
+		pos = end
+	}
+
+	hasMore := pos < len(submitted) || len(result) > limit
+	if len(result) > limit {
+		result = result[:limit]
+	}
+
+	return result, hasMore
+}
+
+func (s *server) handleUserSubmissions(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	user, err := s.hn.getUser(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
+
+	// We need to scan through the submitted list to find stories.
+	// Since the list mixes stories and comments, we can't use a simple offset.
+	// Instead, we skip (page-1)*pageSize matching items.
+	skip := (page - 1) * userPageSize
+	needed := skip + userPageSize + 1 // +1 to check if there's a next page
+
+	items, _ := s.filterSubmittedIDs(r.Context(), user.Submitted, 0, needed, func(item *hnItem) bool {
+		return item.Type != "comment"
+	})
+
+	hasMore := len(items) > skip+userPageSize
+	if skip >= len(items) {
+		items = nil
+	} else {
+		end := skip + userPageSize
+		if end > len(items) {
+			end = len(items)
+		}
+		items = items[skip:end]
+	}
+
+	stories := make([]storyView, 0, len(items))
+	for _, item := range items {
+		stories = append(stories, toStoryView(item, 0))
+	}
+
+	s.render(w, r, "", user.ID+"'s submissions", "userSubmissions", userSubmissionsPageData{
+		UserID:  user.ID,
+		Stories: stories,
+		Page:    page,
+		HasMore: hasMore,
+	})
+}
+
+func (s *server) handleUserComments(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	user, err := s.hn.getUser(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
+
+	skip := (page - 1) * userPageSize
+	needed := skip + userPageSize + 1
+
+	items, _ := s.filterSubmittedIDs(r.Context(), user.Submitted, 0, needed, func(item *hnItem) bool {
+		return item.Type == "comment"
+	})
+
+	hasMore := len(items) > skip+userPageSize
+	if skip >= len(items) {
+		items = nil
+	} else {
+		end := skip + userPageSize
+		if end > len(items) {
+			end = len(items)
+		}
+		items = items[skip:end]
+	}
+
+	// For each comment, find the root story for context ("on: Title")
+	comments := make([]userCommentView, 0, len(items))
+	var wg sync.WaitGroup
+	type result struct {
+		idx     int
+		comment userCommentView
+	}
+	results := make(chan result, len(items))
+
+	for i, item := range items {
+		wg.Add(1)
+		go func(idx int, item *hnItem) {
+			defer wg.Done()
+			cv := userCommentView{
+				ID:      item.ID,
+				By:      fallback(item.By, "unknown"),
+				TimeAgo: timeAgo(item.Time),
+				Text:    template.HTML(item.Text),
+			}
+			if root := s.hn.getRootStory(r.Context(), item); root != nil {
+				cv.OnTitle = root.Title
+				cv.OnID = root.ID
+			}
+			results <- result{idx: idx, comment: cv}
+		}(i, item)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results preserving order
+	ordered := make([]userCommentView, len(items))
+	for res := range results {
+		ordered[res.idx] = res.comment
+	}
+	for _, cv := range ordered {
+		if cv.ID != 0 {
+			comments = append(comments, cv)
+		}
+	}
+
+	s.render(w, r, "", user.ID+"'s comments", "userComments", userCommentsPageData{
+		UserID:   user.ID,
+		Comments: comments,
+		Page:     page,
+		HasMore:  hasMore,
 	})
 }
 

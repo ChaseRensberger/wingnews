@@ -121,6 +121,27 @@ func (c *hnClient) getUser(ctx context.Context, id string) (*hnUser, error) {
 	return user, nil
 }
 
+// getRootStory walks up the parent chain of an item to find the root story.
+// It returns the root story item, or nil if it can't be found within maxDepth hops.
+func (c *hnClient) getRootStory(ctx context.Context, item *hnItem) *hnItem {
+	const maxDepth = 20
+	current := item
+	for range maxDepth {
+		if current.Type != "comment" || current.Parent == 0 {
+			break
+		}
+		parent, err := c.getItem(ctx, current.Parent)
+		if err != nil {
+			return nil
+		}
+		current = parent
+	}
+	if current.Type == "comment" {
+		return nil // couldn't reach a story
+	}
+	return current
+}
+
 func (c *hnClient) hydrateStories(ctx context.Context, ids []int) []*hnItem {
 	if len(ids) == 0 {
 		return nil
