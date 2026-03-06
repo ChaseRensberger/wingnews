@@ -44,6 +44,7 @@ type storyView struct {
 
 type commentView struct {
 	ID              int
+	StoryID         int
 	By              string
 	Created         int64
 	TimeAgo         string

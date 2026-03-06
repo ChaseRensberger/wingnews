@@ -39,13 +39,15 @@
             <a class="whitespace-nowrap text-xs {{if eq .Active "show"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/show">show</a>
             <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
             <a class="whitespace-nowrap text-xs {{if eq .Active "jobs"}}font-bold text-primary{{else}}text-muted-foreground transition-colors hover:text-foreground{{end}}" href="/jobs">jobs</a>
+            <span class="mx-1 select-none text-xs text-muted-foreground/30">|</span>
+            <a class="whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground" href="https://news.ycombinator.com/submit" target="_blank" rel="noopener noreferrer">submit</a>
           </nav>
 
           <a
             href="{{.GitHubURL}}"
             target="_blank"
             rel="noopener noreferrer"
-            class="ml-auto whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground"
+            class="ml-auto hidden whitespace-nowrap text-xs text-muted-foreground transition-colors hover:text-foreground sm:inline"
           >
             GitHub{{if .GitHubStars}} <span class="font-semibold text-foreground">[{{.GitHubStars}}]</span>{{end}}
           </a>

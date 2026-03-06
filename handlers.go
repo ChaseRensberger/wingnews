@@ -365,6 +365,7 @@ func (s *server) buildCommentTree(ids []int, itemsByID map[int]*hnItem, depth, d
 
 		node := &commentView{
 			ID:      item.ID,
+			StoryID: storyID,
 			By:      fallback(item.By, "unknown"),
 			Created: item.Time,
 			TimeAgo: timeAgo(item.Time),

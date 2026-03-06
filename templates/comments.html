@@ -27,7 +27,7 @@
     <summary class="mb-1 flex cursor-pointer list-none flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70 [&::-webkit-details-marker]:hidden">
       <span class="select-none text-muted-foreground/40 group-open:hidden hover:text-foreground">[+]</span>
       <span class="hidden select-none text-muted-foreground/40 group-open:inline hover:text-foreground">[-]</span>
-      <a href="/user/{{.By}}" class="transition-colors hover:text-primary" onclick="event.stopPropagation()">{{.By}}</a><span class="text-muted-foreground/30">|</span><span>{{.TimeAgo}}</span>
+      <a href="/user/{{.By}}" class="transition-colors hover:text-primary" onclick="event.stopPropagation()">{{.By}}</a><span class="text-muted-foreground/30">|</span><span>{{.TimeAgo}}</span><span class="text-muted-foreground/30">|</span><a href="https://news.ycombinator.com/reply?id={{.ID}}&goto=item%3Fid%3D{{.StoryID}}%23{{.ID}}" class="transition-colors hover:text-primary" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">reply</a>
     </summary>
     {{if or .Deleted .Dead}}
       <p class="text-xs text-muted-foreground/80">[deleted]</p>
