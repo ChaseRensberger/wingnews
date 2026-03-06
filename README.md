@@ -34,7 +34,3 @@ With Air installed, run `air` in the project root. It watches `.go` and `.html` 
 docker build -t wingnews .
 docker run -p 3000:3000 wingnews
 ```
-
-## License
-
-MIT
