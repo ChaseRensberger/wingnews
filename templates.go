@@ -6,6 +6,14 @@ import (
 	"net/http"
 )
 
+// seoData carries per-page SEO metadata that gets merged into layoutData.
+type seoData struct {
+	Description  string
+	CanonicalURL string
+	OGType       string
+	JSONLD       template.HTML
+}
+
 func newServer() *server {
 	tmpl := template.Must(template.New("all").Funcs(template.FuncMap{
 		"inc": func(v int) int { return v + 1 },
@@ -28,7 +36,7 @@ func newServer() *server {
 	}
 }
 
-func (s *server) render(w http.ResponseWriter, r *http.Request, active, title, bodyTemplate string, data any) {
+func (s *server) render(w http.ResponseWriter, r *http.Request, active, title, bodyTemplate string, data any, seo ...seoData) {
 	var body bytes.Buffer
 	if err := s.tmpl.ExecuteTemplate(&body, bodyTemplate, data); err != nil {
 		http.Error(w, "template render failed", http.StatusInternalServerError)
@@ -46,6 +54,12 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, active, title, b
 		Active:    active,
 		Content:   template.HTML(body.String()),
 		GitHubURL: "https://github.com/" + githubRepo,
+	}
+	if len(seo) > 0 {
+		layout.Description = seo[0].Description
+		layout.CanonicalURL = seo[0].CanonicalURL
+		layout.OGType = seo[0].OGType
+		layout.JSONLD = seo[0].JSONLD
 	}
 	if stars, err := s.github.getRepoStars(r.Context()); err == nil {
 		layout.GitHubStars = formatStarCount(stars)

@@ -4,6 +4,8 @@ import "html/template"
 
 const pageSize = 30
 
+const baseURL = "https://news.wingman.actor"
+
 type hnItem struct {
 	ID          int    `json:"id"`
 	Type        string `json:"type"`
@@ -110,11 +112,15 @@ type userCommentsPageData struct {
 }
 
 type layoutData struct {
-	Title       string
-	Active      string
-	Content     template.HTML
-	GitHubURL   string
-	GitHubStars string
+	Title        string
+	Description  string
+	CanonicalURL string
+	OGType       string
+	JSONLD       template.HTML
+	Active       string
+	Content      template.HTML
+	GitHubURL    string
+	GitHubStars  string
 }
 
 type server struct {

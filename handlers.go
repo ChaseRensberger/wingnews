@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -15,6 +16,15 @@ import (
 )
 
 func (s *server) handleFeed(feed, path, title string) http.HandlerFunc {
+	descriptions := map[string]string{
+		"top":  "Browse the top stories on Hacker News. A fast, clean reader for the best links and discussions.",
+		"new":  "The newest stories submitted to Hacker News, updated in real time.",
+		"best": "The best stories on Hacker News — highly upvoted links and discussions.",
+		"ask":  "Ask HN discussions: questions, advice, and community threads from Hacker News.",
+		"show": "Show HN projects and launches: things people are building and sharing with the community.",
+		"jobs": "Job listings posted to Hacker News by startups and tech companies.",
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 
@@ -53,12 +63,21 @@ func (s *server) handleFeed(feed, path, title string) http.HandlerFunc {
 			rank++
 		}
 
+		canonical := baseURL + path
+		if page > 1 {
+			canonical = fmt.Sprintf("%s%s?page=%d", baseURL, path, page)
+		}
+
 		s.render(w, r, feed, title, "feed", feedPageData{
 			Feed:    feed,
 			Path:    path,
 			Page:    page,
 			HasMore: end < len(ids),
 			Stories: stories,
+		}, seoData{
+			Description:  descriptions[feed],
+			CanonicalURL: canonical,
+			OGType:       "website",
 		})
 	}
 }
@@ -96,7 +115,100 @@ func (s *server) handleItem(w http.ResponseWriter, r *http.Request) {
 		data.LoadMorePath = fmt.Sprintf("/item/%d/more-comments?sort=%s&offset=%d", item.ID, sortMode, topLevelPageSize)
 	}
 
-	s.render(w, r, "", item.Title, "item", data)
+	description := buildItemDescription(item)
+	jsonld := buildItemJSONLD(item)
+	canonicalURL := fmt.Sprintf("%s/item/%d", baseURL, item.ID)
+
+	s.render(w, r, "", item.Title, "item", data, seoData{
+		Description:  description,
+		CanonicalURL: canonicalURL,
+		OGType:       "article",
+		JSONLD:       jsonld,
+	})
+}
+
+// buildItemDescription constructs a short meta description for a story page.
+func buildItemDescription(item *hnItem) string {
+	parts := []string{}
+	if item.Score > 0 {
+		parts = append(parts, fmt.Sprintf("%d points", item.Score))
+	}
+	if item.By != "" {
+		parts = append(parts, "by "+item.By)
+	}
+	if item.Descendants > 0 {
+		parts = append(parts, fmt.Sprintf("%d comments", item.Descendants))
+	}
+	domain := domainFromURL(item.URL)
+	if domain != "" && domain != "news.ycombinator.com" {
+		parts = append(parts, "from "+domain)
+	}
+	if len(parts) == 0 {
+		return "Discussion on Hacker News via WingNews."
+	}
+	return strings.Join(parts, " · ") + " — via WingNews."
+}
+
+// buildItemJSONLD generates a DiscussionForumPosting JSON-LD block for a story.
+func buildItemJSONLD(item *hnItem) template.HTML {
+	type interactionCounter struct {
+		Type             string `json:"@type"`
+		InteractionType  string `json:"interactionType"`
+		UserInteractions int    `json:"userInteractionCount"`
+	}
+	type author struct {
+		Type string `json:"@type"`
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	}
+	type jsonldDoc struct {
+		Context          string               `json:"@context"`
+		Type             string               `json:"@type"`
+		Headline         string               `json:"headline"`
+		URL              string               `json:"url"`
+		Author           author               `json:"author"`
+		DatePublished    string               `json:"datePublished"`
+		InteractionStats []interactionCounter `json:"interactionStatistic,omitempty"`
+		IsPartOf         map[string]string    `json:"isPartOf,omitempty"`
+	}
+
+	doc := jsonldDoc{
+		Context:       "https://schema.org",
+		Type:          "DiscussionForumPosting",
+		Headline:      item.Title,
+		URL:           fmt.Sprintf("%s/item/%d", baseURL, item.ID),
+		DatePublished: time.Unix(item.Time, 0).UTC().Format(time.RFC3339),
+		Author: author{
+			Type: "Person",
+			Name: fallback(item.By, "unknown"),
+			URL:  fmt.Sprintf("%s/user/%s", baseURL, item.By),
+		},
+		IsPartOf: map[string]string{
+			"@type": "WebSite",
+			"name":  "WingNews",
+			"url":   baseURL,
+		},
+	}
+	if item.Score > 0 {
+		doc.InteractionStats = append(doc.InteractionStats, interactionCounter{
+			Type:             "InteractionCounter",
+			InteractionType:  "https://schema.org/LikeAction",
+			UserInteractions: item.Score,
+		})
+	}
+	if item.Descendants > 0 {
+		doc.InteractionStats = append(doc.InteractionStats, interactionCounter{
+			Type:             "InteractionCounter",
+			InteractionType:  "https://schema.org/CommentAction",
+			UserInteractions: item.Descendants,
+		})
+	}
+
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return ""
+	}
+	return template.HTML(b)
 }
 
 func (s *server) handleItemComments(w http.ResponseWriter, r *http.Request) {
@@ -409,12 +521,55 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	jsonld := buildUserJSONLD(user)
+
 	s.render(w, r, "", "user: "+user.ID, "user", userPageData{
 		ID:         user.ID,
 		Karma:      user.Karma,
 		CreatedAgo: timeAgo(user.Created),
 		About:      template.HTML(user.About),
+	}, seoData{
+		Description:  fmt.Sprintf("%s on Hacker News — %d karma, joined %s. View their submissions and comments on WingNews.", user.ID, user.Karma, timeAgo(user.Created)),
+		CanonicalURL: fmt.Sprintf("%s/user/%s", baseURL, user.ID),
+		OGType:       "profile",
+		JSONLD:       jsonld,
 	})
+}
+
+// buildUserJSONLD generates a ProfilePage JSON-LD block for a user page.
+func buildUserJSONLD(user *hnUser) template.HTML {
+	type person struct {
+		Type        string `json:"@type"`
+		Name        string `json:"name"`
+		URL         string `json:"url"`
+		Description string `json:"description,omitempty"`
+	}
+	type jsonldDoc struct {
+		Context    string `json:"@context"`
+		Type       string `json:"@type"`
+		MainEntity person `json:"mainEntity"`
+		URL        string `json:"url"`
+	}
+
+	doc := jsonldDoc{
+		Context: "https://schema.org",
+		Type:    "ProfilePage",
+		URL:     fmt.Sprintf("%s/user/%s", baseURL, user.ID),
+		MainEntity: person{
+			Type: "Person",
+			Name: user.ID,
+			URL:  fmt.Sprintf("%s/user/%s", baseURL, user.ID),
+		},
+	}
+	if user.About != "" {
+		doc.MainEntity.Description = user.About
+	}
+
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return ""
+	}
+	return template.HTML(b)
 }
 
 const userPageSize = 20
@@ -502,6 +657,10 @@ func (s *server) handleUserSubmissions(w http.ResponseWriter, r *http.Request) {
 		Stories: stories,
 		Page:    page,
 		HasMore: hasMore,
+	}, seoData{
+		Description:  fmt.Sprintf("Stories submitted by %s on Hacker News, via WingNews.", user.ID),
+		CanonicalURL: fmt.Sprintf("%s/user/%s/submissions", baseURL, user.ID),
+		OGType:       "profile",
 	})
 }
 
@@ -586,9 +745,17 @@ func (s *server) handleUserComments(w http.ResponseWriter, r *http.Request) {
 		Comments: comments,
 		Page:     page,
 		HasMore:  hasMore,
+	}, seoData{
+		Description:  fmt.Sprintf("Comments by %s on Hacker News, via WingNews.", user.ID),
+		CanonicalURL: fmt.Sprintf("%s/user/%s/comments", baseURL, user.ID),
+		OGType:       "profile",
 	})
 }
 
 func (s *server) handleSubmit(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "submit", "Submit", "submit", nil)
+	s.render(w, r, "submit", "Submit", "submit", nil, seoData{
+		Description:  "Submit a story or link to Hacker News.",
+		CanonicalURL: baseURL + "/submit",
+		OGType:       "website",
+	})
 }

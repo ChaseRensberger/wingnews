@@ -5,11 +5,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{if .Title}}{{.Title}} | {{end}}WingNews</title>
+    {{if .Description}}<meta name="description" content="{{.Description}}" />{{end}}
+    {{if .CanonicalURL}}<link rel="canonical" href="{{.CanonicalURL}}" />{{end}}
+
+    {{/* Open Graph */}}
+    <meta property="og:site_name" content="WingNews" />
+    <meta property="og:title" content="{{if .Title}}{{.Title}} | {{end}}WingNews" />
+    {{if .Description}}<meta property="og:description" content="{{.Description}}" />{{end}}
+    {{if .CanonicalURL}}<meta property="og:url" content="{{.CanonicalURL}}" />{{end}}
+    <meta property="og:type" content="{{if .OGType}}{{.OGType}}{{else}}website{{end}}" />
+    <meta property="og:image" content="https://news.wingman.actor/public/WingmanBlueLarge.png" />
+
+    {{/* JSON-LD Structured Data */}}
+    {{if .JSONLD}}<script type="application/ld+json">{{.JSONLD}}</script>{{end}}
+
     <link rel="icon" type="image/png" href="/public/WingmanBlue.png" />
     <link rel="manifest" href="/public/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/public/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://unpkg.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
     <link href="/output.css" rel="stylesheet" />
     <meta name="theme-color" content="#121212" />
