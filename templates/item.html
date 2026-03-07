@@ -6,7 +6,9 @@
       <span class="text-muted-foreground/30">|</span>
       <span>item {{.Story.ID}}</span>
     </div>
-    <h1 class="article-title text-base font-bold leading-tight text-foreground">{{.Story.Title}}</h1>
+    <h1 class="text-base font-bold leading-tight">
+      <a href="{{.Story.URL}}" class="article-title text-foreground transition-colors hover:text-primary">{{.Story.Title}}</a>
+    </h1>
     <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground/70">
       {{if gt .Story.Score 0}}<span>{{.Story.Score}} points</span><span class="text-muted-foreground/30">|</span>{{end}}
       <a href="/user/{{.Story.By}}" class="transition-colors hover:text-primary">{{.Story.By}}</a>
