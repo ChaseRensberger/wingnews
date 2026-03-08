@@ -14,7 +14,6 @@
     {{if .Description}}<meta property="og:description" content="{{.Description}}" />{{end}}
     {{if .CanonicalURL}}<meta property="og:url" content="{{.CanonicalURL}}" />{{end}}
     <meta property="og:type" content="{{if .OGType}}{{.OGType}}{{else}}website{{end}}" />
-    <meta property="og:image" content="https://news.wingman.actor/public/WingmanBlueLarge.png" />
 
     {{/* JSON-LD Structured Data */}}
     {{if .JSONLD}}<script type="application/ld+json">{{.JSONLD}}</script>{{end}}
