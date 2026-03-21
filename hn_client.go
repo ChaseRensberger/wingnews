@@ -60,7 +60,7 @@ func (c *hnClient) getFeedIDs(ctx context.Context, feed string) ([]int, error) {
 		return nil, fmt.Errorf("unknown feed %q", feed)
 	}
 
-	value, err := c.cache.getOrLoad(ctx, "feed:"+feed, 45*time.Second, func(ctx context.Context) (any, error) {
+	value, err := c.cache.getOrLoad(ctx, "feed:"+feed, 3*time.Minute, func(ctx context.Context) (any, error) {
 		var ids []int
 		if err := c.fetchJSON(ctx, "/"+endpoint+".json", &ids); err != nil {
 			return nil, err
@@ -77,7 +77,7 @@ func (c *hnClient) getFeedIDs(ctx context.Context, feed string) ([]int, error) {
 
 func (c *hnClient) getItem(ctx context.Context, id int) (*hnItem, error) {
 	cacheKey := "item:" + strconv.Itoa(id)
-	value, err := c.cache.getOrLoad(ctx, cacheKey, 3*time.Minute, func(ctx context.Context) (any, error) {
+	value, err := c.cache.getOrLoad(ctx, cacheKey, 5*time.Minute, func(ctx context.Context) (any, error) {
 		var item *hnItem
 		if err := c.fetchJSON(ctx, "/item/"+strconv.Itoa(id)+".json", &item); err != nil {
 			return nil, err

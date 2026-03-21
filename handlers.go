@@ -308,7 +308,7 @@ func (s *server) handleMoreComments(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) loadComments(ctx context.Context, storyID int, ids []int, sortMode string, offset int) ([]*commentView, string) {
 	cacheKey := fmt.Sprintf("comment-tree:%d:%s:%d", storyID, sortMode, offset)
-	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 45*time.Second, func(ctx context.Context) (any, error) {
+	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 3*time.Minute, func(ctx context.Context) (any, error) {
 		comments, commentsErr := s.loadCommentsFresh(ctx, storyID, ids, sortMode, 0)
 		return struct {
 			Comments []*commentView
@@ -328,7 +328,7 @@ func (s *server) loadComments(ctx context.Context, storyID int, ids []int, sortM
 
 func (s *server) loadCommentChildren(ctx context.Context, storyID, commentID, parentDepth int, sortMode string) ([]*commentView, string) {
 	cacheKey := fmt.Sprintf("comment-children:%d:%d:%d:%s", storyID, commentID, parentDepth, sortMode)
-	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 45*time.Second, func(ctx context.Context) (any, error) {
+	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 3*time.Minute, func(ctx context.Context) (any, error) {
 		parent, err := s.hn.getItem(ctx, commentID)
 		if err != nil || parent == nil {
 			return struct {
