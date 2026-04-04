@@ -45,11 +45,11 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, active, title, b
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if isHXRequest(r) {
-		w.Header().Set("Cache-Control", "public, max-age=30, stale-while-revalidate=60")
+		w.Header().Set("Cache-Control", "public, max-age=120, stale-while-revalidate=300")
 		_, _ = w.Write(body.Bytes())
 		return
 	}
-	w.Header().Set("Cache-Control", "public, max-age=60, stale-while-revalidate=120")
+	w.Header().Set("Cache-Control", "public, max-age=300, stale-while-revalidate=600")
 
 	layout := layoutData{
 		Title:     title,

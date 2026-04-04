@@ -629,6 +629,12 @@ func (s *server) handleUserSubmissions(w http.ResponseWriter, r *http.Request) {
 	// We need to scan through the submitted list to find stories.
 	// Since the list mixes stories and comments, we can't use a simple offset.
 	// Instead, we skip (page-1)*pageSize matching items.
+	// Cap page depth to bound the number of Firebase API calls. Each page
+	// requires scanning all previous pages' worth of items from offset 0.
+	const maxPage = 20
+	if page > maxPage {
+		page = maxPage
+	}
 	skip := (page - 1) * userPageSize
 	needed := skip + userPageSize + 1 // +1 to check if there's a next page
 
@@ -679,6 +685,10 @@ func (s *server) handleUserComments(w http.ResponseWriter, r *http.Request) {
 
 	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 
+	const maxPage = 20
+	if page > maxPage {
+		page = maxPage
+	}
 	skip := (page - 1) * userPageSize
 	needed := skip + userPageSize + 1
 

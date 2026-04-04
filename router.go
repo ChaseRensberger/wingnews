@@ -37,14 +37,18 @@ func newRouter(s *server) http.Handler {
 		r.Get("/ask", s.handleFeed("ask", "/ask", "Ask HN"))
 		r.Get("/show", s.handleFeed("show", "/show", "Show HN"))
 		r.Get("/jobs", s.handleFeed("jobs", "/jobs", "Jobs"))
-		r.Get("/item/{id}", s.handleItem)
-		r.Get("/item/{id}/comments", s.handleItemComments)
-		r.Get("/item/{id}/more-comments", s.handleMoreComments)
-		r.Get("/item/{id}/comment/{commentID}/children", s.handleCommentChildren)
-		r.Get("/user/{id}", s.handleUser)
-		r.Get("/user/{id}/submissions", s.handleUserSubmissions)
-		r.Get("/user/{id}/comments", s.handleUserComments)
 		r.Get("/submit", s.handleSubmit)
+
+		r.Group(func(r chi.Router) {
+			r.Use(httprate.LimitByRealIP(20, time.Minute))
+			r.Get("/item/{id}", s.handleItem)
+			r.Get("/item/{id}/comments", s.handleItemComments)
+			r.Get("/item/{id}/more-comments", s.handleMoreComments)
+			r.Get("/item/{id}/comment/{commentID}/children", s.handleCommentChildren)
+			r.Get("/user/{id}", s.handleUser)
+			r.Get("/user/{id}/submissions", s.handleUserSubmissions)
+			r.Get("/user/{id}/comments", s.handleUserComments)
+		})
 	})
 
 	return r
@@ -65,6 +69,8 @@ func staticCacheControl(next http.Handler) http.Handler {
 }
 
 const robotsTxt = `User-agent: *
+Disallow: /item/
+Disallow: /user/
 Crawl-delay: 10
 Sitemap: https://news.wingman.actor/sitemap.xml
 `
