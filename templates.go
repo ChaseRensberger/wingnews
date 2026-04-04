@@ -44,7 +44,6 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, active, title, b
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Vary", "HX-Request")
 	if isHXRequest(r) {
 		w.Header().Set("Cache-Control", "public, max-age=30, stale-while-revalidate=60")
 		_, _ = w.Write(body.Bytes())
