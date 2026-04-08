@@ -626,43 +626,53 @@ func (s *server) handleUserSubmissions(w http.ResponseWriter, r *http.Request) {
 
 	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 
-	// We need to scan through the submitted list to find stories.
-	// Since the list mixes stories and comments, we can't use a simple offset.
-	// Instead, we skip (page-1)*pageSize matching items.
-	// Cap page depth to bound the number of Firebase API calls. Each page
-	// requires scanning all previous pages' worth of items from offset 0.
 	const maxPage = 20
 	if page > maxPage {
 		page = maxPage
 	}
-	skip := (page - 1) * userPageSize
-	needed := skip + userPageSize + 1 // +1 to check if there's a next page
 
-	items, _ := s.filterSubmittedIDs(r.Context(), user.Submitted, 0, needed, func(item *hnItem) bool {
-		return item.Type != "comment"
-	})
-
-	hasMore := len(items) > skip+userPageSize
-	if skip >= len(items) {
-		items = nil
-	} else {
-		end := skip + userPageSize
-		if end > len(items) {
-			end = len(items)
-		}
-		items = items[skip:end]
+	type submissionsResult struct {
+		Stories []storyView
+		HasMore bool
 	}
 
-	stories := make([]storyView, 0, len(items))
-	for _, item := range items {
-		stories = append(stories, toStoryView(item, 0))
+	cacheKey := fmt.Sprintf("user-submissions:%s:%d", id, page)
+	cached, _ := s.userCache.getOrLoad(r.Context(), cacheKey, 5*time.Minute, func(ctx context.Context) (any, error) {
+		skip := (page - 1) * userPageSize
+		needed := skip + userPageSize + 1
+
+		items, _ := s.filterSubmittedIDs(ctx, user.Submitted, 0, needed, func(item *hnItem) bool {
+			return item.Type != "comment"
+		})
+
+		hasMore := len(items) > skip+userPageSize
+		if skip >= len(items) {
+			items = nil
+		} else {
+			end := skip + userPageSize
+			if end > len(items) {
+				end = len(items)
+			}
+			items = items[skip:end]
+		}
+
+		stories := make([]storyView, 0, len(items))
+		for _, item := range items {
+			stories = append(stories, toStoryView(item, 0))
+		}
+		return &submissionsResult{Stories: stories, HasMore: hasMore}, nil
+	})
+
+	res, _ := cached.(*submissionsResult)
+	if res == nil {
+		res = &submissionsResult{}
 	}
 
 	s.render(w, r, "", user.ID+"'s submissions", "userSubmissions", userSubmissionsPageData{
 		UserID:  user.ID,
-		Stories: stories,
+		Stories: res.Stories,
 		Page:    page,
-		HasMore: hasMore,
+		HasMore: res.HasMore,
 	}, seoData{
 		Description:  fmt.Sprintf("Stories submitted by %s on Hacker News, via WingNews.", user.ID),
 		CanonicalURL: fmt.Sprintf("%s/user/%s/submissions", baseURL, user.ID),
@@ -689,72 +699,90 @@ func (s *server) handleUserComments(w http.ResponseWriter, r *http.Request) {
 	if page > maxPage {
 		page = maxPage
 	}
-	skip := (page - 1) * userPageSize
-	needed := skip + userPageSize + 1
 
-	items, _ := s.filterSubmittedIDs(r.Context(), user.Submitted, 0, needed, func(item *hnItem) bool {
-		return item.Type == "comment"
+	type commentsResult struct {
+		Comments []userCommentView
+		HasMore  bool
+	}
+
+	cacheKey := fmt.Sprintf("user-comments:%s:%d", id, page)
+	cached, _ := s.userCache.getOrLoad(r.Context(), cacheKey, 5*time.Minute, func(ctx context.Context) (any, error) {
+		skip := (page - 1) * userPageSize
+		needed := skip + userPageSize + 1
+
+		items, _ := s.filterSubmittedIDs(ctx, user.Submitted, 0, needed, func(item *hnItem) bool {
+			return item.Type == "comment"
+		})
+
+		hasMore := len(items) > skip+userPageSize
+		if skip >= len(items) {
+			items = nil
+		} else {
+			end := skip + userPageSize
+			if end > len(items) {
+				end = len(items)
+			}
+			items = items[skip:end]
+		}
+
+		// For each comment, find the root story for context ("on: Title").
+		// This walks up the parent chain (up to 20 hops) per comment, so we cache
+		// the full result to avoid repeating these Firebase calls on every page load.
+		type fetchResult struct {
+			idx     int
+			comment userCommentView
+		}
+		fetchResults := make(chan fetchResult, len(items))
+		var wg sync.WaitGroup
+
+		for i, item := range items {
+			wg.Add(1)
+			go func(idx int, item *hnItem) {
+				defer wg.Done()
+				cv := userCommentView{
+					ID:      item.ID,
+					By:      fallback(item.By, "unknown"),
+					TimeAgo: timeAgo(item.Time),
+					Text:    template.HTML(item.Text),
+				}
+				if root := s.hn.getRootStory(ctx, item); root != nil {
+					cv.OnTitle = root.Title
+					cv.OnID = root.ID
+				}
+				fetchResults <- fetchResult{idx: idx, comment: cv}
+			}(i, item)
+		}
+
+		go func() {
+			wg.Wait()
+			close(fetchResults)
+		}()
+
+		ordered := make([]userCommentView, len(items))
+		for res := range fetchResults {
+			ordered[res.idx] = res.comment
+		}
+
+		comments := make([]userCommentView, 0, len(ordered))
+		for _, cv := range ordered {
+			if cv.ID != 0 {
+				comments = append(comments, cv)
+			}
+		}
+
+		return &commentsResult{Comments: comments, HasMore: hasMore}, nil
 	})
 
-	hasMore := len(items) > skip+userPageSize
-	if skip >= len(items) {
-		items = nil
-	} else {
-		end := skip + userPageSize
-		if end > len(items) {
-			end = len(items)
-		}
-		items = items[skip:end]
-	}
-
-	// For each comment, find the root story for context ("on: Title")
-	comments := make([]userCommentView, 0, len(items))
-	var wg sync.WaitGroup
-	type result struct {
-		idx     int
-		comment userCommentView
-	}
-	results := make(chan result, len(items))
-
-	for i, item := range items {
-		wg.Add(1)
-		go func(idx int, item *hnItem) {
-			defer wg.Done()
-			cv := userCommentView{
-				ID:      item.ID,
-				By:      fallback(item.By, "unknown"),
-				TimeAgo: timeAgo(item.Time),
-				Text:    template.HTML(item.Text),
-			}
-			if root := s.hn.getRootStory(r.Context(), item); root != nil {
-				cv.OnTitle = root.Title
-				cv.OnID = root.ID
-			}
-			results <- result{idx: idx, comment: cv}
-		}(i, item)
-	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	// Collect results preserving order
-	ordered := make([]userCommentView, len(items))
-	for res := range results {
-		ordered[res.idx] = res.comment
-	}
-	for _, cv := range ordered {
-		if cv.ID != 0 {
-			comments = append(comments, cv)
-		}
+	res, _ := cached.(*commentsResult)
+	if res == nil {
+		res = &commentsResult{}
 	}
 
 	s.render(w, r, "", user.ID+"'s comments", "userComments", userCommentsPageData{
 		UserID:   user.ID,
-		Comments: comments,
+		Comments: res.Comments,
 		Page:     page,
-		HasMore:  hasMore,
+		HasMore:  res.HasMore,
 	}, seoData{
 		Description:  fmt.Sprintf("Comments by %s on Hacker News, via WingNews.", user.ID),
 		CanonicalURL: fmt.Sprintf("%s/user/%s/comments", baseURL, user.ID),

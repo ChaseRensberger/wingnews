@@ -34,7 +34,11 @@ func newHNMemoryCache() *memoryCache {
 }
 
 func newCommentsMemoryCache() *memoryCache {
-	return newMemoryCache(1500, 20*time.Second)
+	return newMemoryCache(10000, time.Minute)
+}
+
+func newUserMemoryCache() *memoryCache {
+	return newMemoryCache(2000, time.Minute)
 }
 
 func newMemoryCache(maxEntries int, cleanupInterval time.Duration) *memoryCache {

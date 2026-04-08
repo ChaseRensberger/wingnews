@@ -33,6 +33,7 @@ func newServer() *server {
 		github:        newGitHubClient(githubRepo),
 		tmpl:          tmpl,
 		commentsCache: newCommentsMemoryCache(),
+		userCache:     newUserMemoryCache(),
 	}
 }
 

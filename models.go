@@ -128,4 +128,5 @@ type server struct {
 	github        *githubClient
 	tmpl          *template.Template
 	commentsCache *memoryCache
+	userCache     *memoryCache
 }
