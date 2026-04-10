@@ -1,10 +1,8 @@
 package main
 
-import "html/template"
-
-const pageSize = 30
-
-const baseURL = "https://news.wingman.actor"
+import (
+	"html/template"
+)
 
 type hnItem struct {
 	ID          int    `json:"id"`
@@ -86,8 +84,8 @@ type userCommentView struct {
 	By      string
 	TimeAgo string
 	Text    template.HTML
-	OnTitle string // title of the root story
-	OnID    int    // ID of the root story
+	OnTitle string
+	OnID    int
 }
 
 type userPageData struct {

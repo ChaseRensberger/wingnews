@@ -32,13 +32,16 @@ func (c *hnClient) fetchJSON(ctx context.Context, path string, out any) error {
 		return err
 	}
 
+	metrics.hnFetchTotal.Add(1)
 	resp, err := c.http.Do(req)
 	if err != nil {
+		metrics.hnFetchErrors.Add(1)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.hnFetchErrors.Add(1)
 		return fmt.Errorf("upstream status %d", resp.StatusCode)
 	}
 
@@ -60,7 +63,7 @@ func (c *hnClient) getFeedIDs(ctx context.Context, feed string) ([]int, error) {
 		return nil, fmt.Errorf("unknown feed %q", feed)
 	}
 
-	value, err := c.cache.getOrLoad(ctx, "feed:"+feed, 3*time.Minute, func(ctx context.Context) (any, error) {
+	value, err := c.cache.getOrLoad(ctx, "feed:"+feed, ttlFeedIDs, func(ctx context.Context) (any, error) {
 		var ids []int
 		if err := c.fetchJSON(ctx, "/"+endpoint+".json", &ids); err != nil {
 			return nil, err
@@ -77,7 +80,7 @@ func (c *hnClient) getFeedIDs(ctx context.Context, feed string) ([]int, error) {
 
 func (c *hnClient) getItem(ctx context.Context, id int) (*hnItem, error) {
 	cacheKey := "item:" + strconv.Itoa(id)
-	value, err := c.cache.getOrLoad(ctx, cacheKey, 5*time.Minute, func(ctx context.Context) (any, error) {
+	value, err := c.cache.getOrLoad(ctx, cacheKey, ttlItem, func(ctx context.Context) (any, error) {
 		var item *hnItem
 		if err := c.fetchJSON(ctx, "/item/"+strconv.Itoa(id)+".json", &item); err != nil {
 			return nil, err
@@ -100,7 +103,7 @@ func (c *hnClient) getItem(ctx context.Context, id int) (*hnItem, error) {
 
 func (c *hnClient) getUser(ctx context.Context, id string) (*hnUser, error) {
 	cacheKey := "user:" + strings.ToLower(id)
-	value, err := c.cache.getOrLoad(ctx, cacheKey, 10*time.Minute, func(ctx context.Context) (any, error) {
+	value, err := c.cache.getOrLoad(ctx, cacheKey, ttlUser, func(ctx context.Context) (any, error) {
 		var user *hnUser
 		if err := c.fetchJSON(ctx, "/user/"+url.PathEscape(id)+".json", &user); err != nil {
 			return nil, err
@@ -121,12 +124,9 @@ func (c *hnClient) getUser(ctx context.Context, id string) (*hnUser, error) {
 	return user, nil
 }
 
-// getRootStory walks up the parent chain of an item to find the root story.
-// It returns the root story item, or nil if it can't be found within maxDepth hops.
 func (c *hnClient) getRootStory(ctx context.Context, item *hnItem) *hnItem {
-	const maxDepth = 20
 	current := item
-	for range maxDepth {
+	for range rootStoryMaxDepth {
 		if current.Type != "comment" || current.Parent == 0 {
 			break
 		}
@@ -137,7 +137,7 @@ func (c *hnClient) getRootStory(ctx context.Context, item *hnItem) *hnItem {
 		current = parent
 	}
 	if current.Type == "comment" {
-		return nil // couldn't reach a story
+		return nil
 	}
 	return current
 }
@@ -147,7 +147,7 @@ func (c *hnClient) hydrateStories(ctx context.Context, ids []int) []*hnItem {
 		return nil
 	}
 
-	workers := 8
+	workers := feedHydrateWorkers
 	if len(ids) < workers {
 		workers = len(ids)
 	}

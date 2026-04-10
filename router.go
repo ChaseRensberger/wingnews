@@ -17,14 +17,14 @@ func newRouter(s *server) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5, "text/html", "text/css", "application/javascript", "text/plain", "application/xml"))
 
-	// Static assets: long cache + no rate limiting
+	r.Get("/debug/stats", handleDebugStats)
+
 	r.Group(func(r chi.Router) {
 		r.Use(staticCacheControl)
 		r.Handle("/output.css", http.FileServer(http.Dir(".")))
 		r.Handle("/public/*", http.StripPrefix("/public/", http.FileServer(http.Dir("public"))))
 	})
 
-	// Dynamic routes: rate limited + request timeout
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(8 * time.Second))
 		r.Use(httprate.LimitByRealIP(100, time.Minute))
@@ -54,7 +54,6 @@ func newRouter(s *server) http.Handler {
 	return r
 }
 
-// staticCacheControl sets long-lived Cache-Control headers for static assets.
 func staticCacheControl(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, ".css") {
@@ -69,10 +68,7 @@ func staticCacheControl(next http.Handler) http.Handler {
 }
 
 const robotsTxt = `User-agent: *
-Disallow: /item/
-Disallow: /user/
-Crawl-delay: 10
-Sitemap: https://news.wingman.actor/sitemap.xml
+Disallow: /
 `
 
 func handleRobotsTxt(w http.ResponseWriter, r *http.Request) {

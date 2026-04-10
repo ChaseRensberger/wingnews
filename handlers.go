@@ -82,8 +82,6 @@ func (s *server) handleFeed(feed, path, title string) http.HandlerFunc {
 	}
 }
 
-const topLevelPageSize = 20
-
 func (s *server) handleItem(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -127,7 +125,6 @@ func (s *server) handleItem(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// buildItemDescription constructs a short meta description for a story page.
 func buildItemDescription(item *hnItem) string {
 	parts := []string{}
 	if item.Score > 0 {
@@ -149,7 +146,6 @@ func buildItemDescription(item *hnItem) string {
 	return strings.Join(parts, " · ") + " — via WingNews."
 }
 
-// buildItemJSONLD generates a DiscussionForumPosting JSON-LD block for a story.
 func buildItemJSONLD(item *hnItem) template.HTML {
 	type interactionCounter struct {
 		Type             string `json:"@type"`
@@ -308,7 +304,7 @@ func (s *server) handleMoreComments(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) loadComments(ctx context.Context, storyID int, ids []int, sortMode string, offset int) ([]*commentView, string) {
 	cacheKey := fmt.Sprintf("comment-tree:%d:%s:%d", storyID, sortMode, offset)
-	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 3*time.Minute, func(ctx context.Context) (any, error) {
+	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, ttlCommentTree, func(ctx context.Context) (any, error) {
 		comments, commentsErr := s.loadCommentsFresh(ctx, storyID, ids, sortMode, 0)
 		return struct {
 			Comments []*commentView
@@ -328,7 +324,7 @@ func (s *server) loadComments(ctx context.Context, storyID int, ids []int, sortM
 
 func (s *server) loadCommentChildren(ctx context.Context, storyID, commentID, parentDepth int, sortMode string) ([]*commentView, string) {
 	cacheKey := fmt.Sprintf("comment-children:%d:%d:%d:%s", storyID, commentID, parentDepth, sortMode)
-	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, 3*time.Minute, func(ctx context.Context) (any, error) {
+	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, ttlCommentTree, func(ctx context.Context) (any, error) {
 		parent, err := s.hn.getItem(ctx, commentID)
 		if err != nil || parent == nil {
 			return struct {
@@ -355,10 +351,9 @@ func (s *server) loadCommentChildren(ctx context.Context, storyID, commentID, pa
 }
 
 func (s *server) loadCommentsFresh(ctx context.Context, storyID int, ids []int, sortMode string, baseDepth int) ([]*commentView, string) {
-	const maxNodes = 50
 	const eagerDepth = 2
 
-	itemsByID, _ := s.fetchCommentItems(ctx, ids, maxNodes)
+	itemsByID, _ := s.fetchCommentItems(ctx, ids, maxCommentNodes)
 	comments := s.buildCommentTree(ids, itemsByID, baseDepth, baseDepth+eagerDepth, storyID, sortMode)
 	if sortMode == "new" {
 		sortCommentsByNewest(comments)
@@ -372,7 +367,7 @@ func (s *server) fetchCommentItems(ctx context.Context, ids []int, maxNodes int)
 		return map[int]*hnItem{}, false
 	}
 
-	workers := 24
+	workers := commentFetchWorkers
 	if maxNodes < workers {
 		workers = maxNodes
 	}
@@ -536,7 +531,6 @@ func (s *server) handleUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// buildUserJSONLD generates a ProfilePage JSON-LD block for a user page.
 func buildUserJSONLD(user *hnUser) template.HTML {
 	type person struct {
 		Type        string `json:"@type"`
@@ -572,18 +566,12 @@ func buildUserJSONLD(user *hnUser) template.HTML {
 	return template.HTML(b)
 }
 
-const userPageSize = 20
-
-// filterSubmittedIDs hydrates items from the user's Submitted list in batches,
-// filtering by type. It skips items that don't match the filter and continues
-// fetching until it has enough items or runs out of IDs.
 func (s *server) filterSubmittedIDs(ctx context.Context, submitted []int, offset int, limit int, keep func(*hnItem) bool) ([]*hnItem, bool) {
-	const batchSize = 50
 	result := make([]*hnItem, 0, limit)
 	pos := offset
 
 	for len(result) < limit && pos < len(submitted) {
-		end := pos + batchSize
+		end := pos + userSubmissionBatchSize
 		if end > len(submitted) {
 			end = len(submitted)
 		}
@@ -626,11 +614,8 @@ func (s *server) handleUserSubmissions(w http.ResponseWriter, r *http.Request) {
 
 	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 
-	// We need to scan through the submitted list to find stories.
-	// Since the list mixes stories and comments, we can't use a simple offset.
-	// Instead, we skip (page-1)*pageSize matching items.
 	skip := (page - 1) * userPageSize
-	needed := skip + userPageSize + 1 // +1 to check if there's a next page
+	needed := skip + userPageSize + 1
 
 	items, _ := s.filterSubmittedIDs(r.Context(), user.Submitted, 0, needed, func(item *hnItem) bool {
 		return item.Type != "comment"
@@ -697,7 +682,6 @@ func (s *server) handleUserComments(w http.ResponseWriter, r *http.Request) {
 		items = items[skip:end]
 	}
 
-	// For each comment, find the root story for context ("on: Title")
 	comments := make([]userCommentView, 0, len(items))
 	var wg sync.WaitGroup
 	type result struct {
@@ -729,7 +713,6 @@ func (s *server) handleUserComments(w http.ResponseWriter, r *http.Request) {
 		close(results)
 	}()
 
-	// Collect results preserving order
 	ordered := make([]userCommentView, len(items))
 	for res := range results {
 		ordered[res.idx] = res.comment

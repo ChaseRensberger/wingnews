@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-const githubRepo = "ChaseRensberger/wingnews"
-
 type githubClient struct {
 	http  *http.Client
 	cache *memoryCache
@@ -27,7 +25,7 @@ func newGitHubClient(repo string) *githubClient {
 }
 
 func (c *githubClient) getRepoStars(ctx context.Context) (int, error) {
-	value, err := c.cache.getOrLoad(ctx, "github:stars:"+c.repo, 10*time.Minute, func(ctx context.Context) (any, error) {
+	value, err := c.cache.getOrLoad(ctx, "github:stars:"+c.repo, ttlGitHubStars, func(ctx context.Context) (any, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+c.repo, nil)
 		if err != nil {
 			return nil, err
@@ -35,13 +33,16 @@ func (c *githubClient) getRepoStars(ctx context.Context) (int, error) {
 		req.Header.Set("Accept", "application/vnd.github+json")
 		req.Header.Set("User-Agent", "wingnews")
 
+		metrics.githubFetchTotal.Add(1)
 		resp, err := c.http.Do(req)
 		if err != nil {
+			metrics.githubFetchErrors.Add(1)
 			return nil, err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
+			metrics.githubFetchErrors.Add(1)
 			return nil, fmt.Errorf("github api status %d", resp.StatusCode)
 		}
 

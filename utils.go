@@ -123,8 +123,6 @@ func sortCommentsByNewest(nodes []*commentView) {
 	})
 }
 
-// paginateIDs returns a slice of ids starting at offset with at most limit items,
-// and the count of remaining ids after this page.
 func paginateIDs(ids []int, offset, limit int) (page []int, remaining int) {
 	if offset >= len(ids) {
 		return nil, 0
