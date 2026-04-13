@@ -18,6 +18,9 @@ type hnItem struct {
 	Kids        []int  `json:"kids"`
 	Deleted     bool   `json:"deleted"`
 	Dead        bool   `json:"dead"`
+	// Populated from Algolia search hits; not present in the item tree endpoint.
+	StoryID    int    `json:"-"`
+	StoryTitle string `json:"-"`
 }
 
 type hnUser struct {

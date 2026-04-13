@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -20,10 +19,56 @@ type hnClient struct {
 
 func newHNClient() *hnClient {
 	return &hnClient{
-		http:  &http.Client{Timeout: 6 * time.Second},
-		base:  "https://hacker-news.firebaseio.com/v0",
+		http:  &http.Client{Timeout: 10 * time.Second},
+		base:  "https://hn.algolia.com/api/v1",
 		cache: newHNMemoryCache(),
 	}
+}
+
+// Algolia API response types
+
+type algoliaSearchResult struct {
+	Hits    []algoliaHit `json:"hits"`
+	NbHits  int          `json:"nbHits"`
+	Page    int          `json:"page"`
+	NbPages int          `json:"nbPages"`
+}
+
+type algoliaHit struct {
+	ObjectID    string   `json:"objectID"`
+	Title       string   `json:"title"`
+	URL         string   `json:"url"`
+	Points      int      `json:"points"`
+	Author      string   `json:"author"`
+	CreatedAtI  int64    `json:"created_at_i"`
+	NumComments int      `json:"num_comments"`
+	StoryID     *int     `json:"story_id"`
+	StoryTitle  string   `json:"story_title"`
+	ParentID    *int     `json:"parent_id"`
+	StoryText   string   `json:"story_text"`
+	CommentText string   `json:"comment_text"`
+	Tags        []string `json:"_tags"`
+}
+
+type algoliaItem struct {
+	ID         int            `json:"id"`
+	CreatedAtI int64          `json:"created_at_i"`
+	Type       string         `json:"type"`
+	Author     string         `json:"author"`
+	Title      string         `json:"title"`
+	URL        string         `json:"url"`
+	Text       string         `json:"text"`
+	Points     *int           `json:"points"`
+	ParentID   *int           `json:"parent_id"`
+	StoryID    *int           `json:"story_id"`
+	Children   []*algoliaItem `json:"children"`
+}
+
+type algoliaUser struct {
+	ID         string `json:"id"`
+	About      string `json:"about"`
+	Karma      int    `json:"karma"`
+	CreatedAtI int64  `json:"created_at_i"`
 }
 
 func (c *hnClient) fetchJSON(ctx context.Context, path string, out any) error {
@@ -48,46 +93,111 @@ func (c *hnClient) fetchJSON(ctx context.Context, path string, out any) error {
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func (c *hnClient) getFeedIDs(ctx context.Context, feed string) ([]int, error) {
-	endpointByFeed := map[string]string{
-		"top":  "topstories",
-		"new":  "newstories",
-		"best": "beststories",
-		"ask":  "askstories",
-		"show": "showstories",
-		"jobs": "jobstories",
+// getFeedPage returns one page of stories for the named feed.
+// page is 1-indexed. Returns the items and whether more pages exist.
+// This replaces the old getFeedIDs + hydrateStories two-step pattern:
+// instead of fetching 500 IDs then N individual item requests, a single
+// Algolia search request returns fully-hydrated stories for the page.
+func (c *hnClient) getFeedPage(ctx context.Context, feed string, page int) ([]*hnItem, bool, error) {
+	if page < 1 {
+		page = 1
+	}
+	algoPage := page - 1 // Algolia uses 0-indexed pages
+
+	type feedConfig struct {
+		endpoint string
+		tags     string
+	}
+	feedCfg := map[string]feedConfig{
+		"top":  {"/search", "front_page"},
+		"new":  {"/search_by_date", "story"},
+		"best": {"/search", "story"},
+		"ask":  {"/search", "ask_hn"},
+		"show": {"/search", "show_hn"},
+		"jobs": {"/search", "job"},
 	}
 
-	endpoint, ok := endpointByFeed[feed]
+	cfg, ok := feedCfg[feed]
 	if !ok {
-		return nil, fmt.Errorf("unknown feed %q", feed)
+		return nil, false, fmt.Errorf("unknown feed %q", feed)
 	}
 
-	value, err := c.cache.getOrLoad(ctx, "feed:"+feed, ttlFeedIDs, func(ctx context.Context) (any, error) {
-		var ids []int
-		if err := c.fetchJSON(ctx, "/"+endpoint+".json", &ids); err != nil {
+	cacheKey := fmt.Sprintf("feed-page:%s:%d", feed, page)
+	value, err := c.cache.getOrLoad(ctx, cacheKey, ttlFeedIDs, func(ctx context.Context) (any, error) {
+		params := url.Values{}
+		params.Set("tags", cfg.tags)
+		params.Set("hitsPerPage", strconv.Itoa(pageSize))
+		params.Set("page", strconv.Itoa(algoPage))
+
+		var result algoliaSearchResult
+		if err := c.fetchJSON(ctx, cfg.endpoint+"?"+params.Encode(), &result); err != nil {
 			return nil, err
 		}
-		return ids, nil
+
+		items := make([]*hnItem, 0, len(result.Hits))
+		for i := range result.Hits {
+			items = append(items, algoliaHitToHNItem(&result.Hits[i]))
+		}
+		hasMore := result.Page+1 < result.NbPages
+		return struct {
+			Items   []*hnItem
+			HasMore bool
+		}{items, hasMore}, nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	payload, _ := value.(struct {
+		Items   []*hnItem
+		HasMore bool
+	})
+	return payload.Items, payload.HasMore, nil
+}
+
+// getItem fetches a single item by ID using Algolia's /items/{id} endpoint.
+func (c *hnClient) getItem(ctx context.Context, id int) (*hnItem, error) {
+	cacheKey := "item:" + strconv.Itoa(id)
+	value, err := c.cache.getOrLoad(ctx, cacheKey, ttlItem, func(ctx context.Context) (any, error) {
+		var a algoliaItem
+		if err := c.fetchJSON(ctx, fmt.Sprintf("/items/%d", id), &a); err != nil {
+			return nil, err
+		}
+		if a.ID == 0 {
+			return nil, fmt.Errorf("item %d not found", id)
+		}
+		return algoliaItemToHNItem(&a), nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	ids, _ := value.([]int)
-	return ids, nil
+	item, _ := value.(*hnItem)
+	if item == nil {
+		return nil, fmt.Errorf("item %d not found", id)
+	}
+	return item, nil
 }
 
-func (c *hnClient) getItem(ctx context.Context, id int) (*hnItem, error) {
+// getItemTree fetches a story with its full nested comment tree in a single
+// Algolia request, then pre-warms the item cache with every descendant so
+// that subsequent comment-expansion requests are served entirely from cache.
+func (c *hnClient) getItemTree(ctx context.Context, id int) (*hnItem, error) {
 	cacheKey := "item:" + strconv.Itoa(id)
 	value, err := c.cache.getOrLoad(ctx, cacheKey, ttlItem, func(ctx context.Context) (any, error) {
-		var item *hnItem
-		if err := c.fetchJSON(ctx, "/item/"+strconv.Itoa(id)+".json", &item); err != nil {
+		var a algoliaItem
+		if err := c.fetchJSON(ctx, fmt.Sprintf("/items/%d", id), &a); err != nil {
 			return nil, err
 		}
-		if item == nil {
+		if a.ID == 0 {
 			return nil, fmt.Errorf("item %d not found", id)
 		}
+		// Pre-warm descendants so comment fetches hit cache
+		for _, child := range a.Children {
+			c.prewarmTree(child)
+		}
+		item := algoliaItemToHNItem(&a)
+		item.Descendants = countDescendants(&a)
 		return item, nil
 	})
 	if err != nil {
@@ -101,17 +211,47 @@ func (c *hnClient) getItem(ctx context.Context, id int) (*hnItem, error) {
 	return item, nil
 }
 
+// prewarmTree recursively stores each algoliaItem in the item cache
+// so subsequent getItem calls are served without a network request.
+func (c *hnClient) prewarmTree(a *algoliaItem) {
+	if a == nil || a.ID == 0 {
+		return
+	}
+	key := "item:" + strconv.Itoa(a.ID)
+	exp := time.Now().Add(ttlItem)
+	c.cache.mu.Lock()
+	if _, exists := c.cache.entries[key]; !exists {
+		c.cache.upsert(key, algoliaItemToHNItem(a), exp)
+	}
+	c.cache.mu.Unlock()
+	for _, child := range a.Children {
+		c.prewarmTree(child)
+	}
+}
+
+// countDescendants returns the total number of non-nil descendants in the tree.
+func countDescendants(a *algoliaItem) int {
+	n := 0
+	for _, child := range a.Children {
+		if child != nil {
+			n += 1 + countDescendants(child)
+		}
+	}
+	return n
+}
+
+// getUser fetches a user profile from Algolia's /users/{id} endpoint.
 func (c *hnClient) getUser(ctx context.Context, id string) (*hnUser, error) {
 	cacheKey := "user:" + strings.ToLower(id)
 	value, err := c.cache.getOrLoad(ctx, cacheKey, ttlUser, func(ctx context.Context) (any, error) {
-		var user *hnUser
-		if err := c.fetchJSON(ctx, "/user/"+url.PathEscape(id)+".json", &user); err != nil {
+		var u algoliaUser
+		if err := c.fetchJSON(ctx, "/users/"+url.PathEscape(id), &u); err != nil {
 			return nil, err
 		}
-		if user == nil {
+		if u.ID == "" {
 			return nil, fmt.Errorf("user %q not found", id)
 		}
-		return user, nil
+		return algoliaUserToHNUser(&u), nil
 	})
 	if err != nil {
 		return nil, err
@@ -124,6 +264,90 @@ func (c *hnClient) getUser(ctx context.Context, id string) (*hnUser, error) {
 	return user, nil
 }
 
+// getUserStories returns a page of stories submitted by a user.
+// This replaces the old getUser + filterSubmittedIDs pattern with a
+// single Algolia search that is already paginated.
+func (c *hnClient) getUserStories(ctx context.Context, username string, page int) ([]*hnItem, bool, error) {
+	if page < 1 {
+		page = 1
+	}
+	cacheKey := fmt.Sprintf("user-stories:%s:%d", strings.ToLower(username), page)
+	value, err := c.cache.getOrLoad(ctx, cacheKey, ttlUser, func(ctx context.Context) (any, error) {
+		params := url.Values{}
+		params.Set("tags", "story,author_"+username)
+		params.Set("hitsPerPage", strconv.Itoa(userPageSize))
+		params.Set("page", strconv.Itoa(page-1))
+
+		var result algoliaSearchResult
+		if err := c.fetchJSON(ctx, "/search_by_date?"+params.Encode(), &result); err != nil {
+			return nil, err
+		}
+
+		items := make([]*hnItem, 0, len(result.Hits))
+		for i := range result.Hits {
+			items = append(items, algoliaHitToHNItem(&result.Hits[i]))
+		}
+		hasMore := result.Page+1 < result.NbPages
+		return struct {
+			Items   []*hnItem
+			HasMore bool
+		}{items, hasMore}, nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	payload, _ := value.(struct {
+		Items   []*hnItem
+		HasMore bool
+	})
+	return payload.Items, payload.HasMore, nil
+}
+
+// getUserComments returns a page of comments posted by a user.
+// Items have StoryID and StoryTitle populated so the caller does not need
+// to call getRootStory for each comment.
+func (c *hnClient) getUserComments(ctx context.Context, username string, page int) ([]*hnItem, bool, error) {
+	if page < 1 {
+		page = 1
+	}
+	cacheKey := fmt.Sprintf("user-comments:%s:%d", strings.ToLower(username), page)
+	value, err := c.cache.getOrLoad(ctx, cacheKey, ttlUser, func(ctx context.Context) (any, error) {
+		params := url.Values{}
+		params.Set("tags", "comment,author_"+username)
+		params.Set("hitsPerPage", strconv.Itoa(userPageSize))
+		params.Set("page", strconv.Itoa(page-1))
+
+		var result algoliaSearchResult
+		if err := c.fetchJSON(ctx, "/search_by_date?"+params.Encode(), &result); err != nil {
+			return nil, err
+		}
+
+		items := make([]*hnItem, 0, len(result.Hits))
+		for i := range result.Hits {
+			items = append(items, algoliaHitToHNItem(&result.Hits[i]))
+		}
+		hasMore := result.Page+1 < result.NbPages
+		return struct {
+			Items   []*hnItem
+			HasMore bool
+		}{items, hasMore}, nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	payload, _ := value.(struct {
+		Items   []*hnItem
+		HasMore bool
+	})
+	return payload.Items, payload.HasMore, nil
+}
+
+// getRootStory returns the root story for a comment by traversing the parent
+// chain. Items loaded via getItemTree are already in cache, so this is
+// typically free. For fresh comment items from user pages the traversal
+// makes at most rootStoryMaxDepth API calls.
 func (c *hnClient) getRootStory(ctx context.Context, item *hnItem) *hnItem {
 	current := item
 	for range rootStoryMaxDepth {
@@ -142,39 +366,81 @@ func (c *hnClient) getRootStory(ctx context.Context, item *hnItem) *hnItem {
 	return current
 }
 
-func (c *hnClient) hydrateStories(ctx context.Context, ids []int) []*hnItem {
-	if len(ids) == 0 {
-		return nil
+// Conversion helpers
+
+func algoliaHitToHNItem(h *algoliaHit) *hnItem {
+	id, _ := strconv.Atoi(h.ObjectID)
+	itemType := "story"
+	for _, tag := range h.Tags {
+		switch tag {
+		case "comment":
+			itemType = "comment"
+		case "job":
+			itemType = "job"
+		}
 	}
-
-	workers := feedHydrateWorkers
-	if len(ids) < workers {
-		workers = len(ids)
+	text := h.StoryText
+	if itemType == "comment" {
+		text = h.CommentText
 	}
-
-	out := make([]*hnItem, len(ids))
-	jobs := make(chan int)
-	var wg sync.WaitGroup
-
-	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range jobs {
-				item, err := c.getItem(ctx, ids[i])
-				if err != nil {
-					continue
-				}
-				out[i] = item
-			}
-		}()
+	parent := 0
+	if h.ParentID != nil {
+		parent = *h.ParentID
 	}
-
-	for i := range ids {
-		jobs <- i
+	storyID := 0
+	if h.StoryID != nil {
+		storyID = *h.StoryID
 	}
-	close(jobs)
-	wg.Wait()
+	return &hnItem{
+		ID:          id,
+		Type:        itemType,
+		By:          h.Author,
+		Time:        h.CreatedAtI,
+		Title:       h.Title,
+		Text:        text,
+		URL:         h.URL,
+		Score:       h.Points,
+		Parent:      parent,
+		Descendants: h.NumComments,
+		StoryID:     storyID,
+		StoryTitle:  h.StoryTitle,
+	}
+}
 
-	return out
+func algoliaItemToHNItem(a *algoliaItem) *hnItem {
+	parent := 0
+	if a.ParentID != nil {
+		parent = *a.ParentID
+	}
+	points := 0
+	if a.Points != nil {
+		points = *a.Points
+	}
+	kids := make([]int, 0, len(a.Children))
+	for _, child := range a.Children {
+		if child != nil {
+			kids = append(kids, child.ID)
+		}
+	}
+	return &hnItem{
+		ID:     a.ID,
+		Type:   a.Type,
+		By:     a.Author,
+		Time:   a.CreatedAtI,
+		Title:  a.Title,
+		Text:   a.Text,
+		URL:    a.URL,
+		Score:  points,
+		Parent: parent,
+		Kids:   kids,
+	}
+}
+
+func algoliaUserToHNUser(u *algoliaUser) *hnUser {
+	return &hnUser{
+		ID:      u.ID,
+		Created: u.CreatedAtI,
+		Karma:   u.Karma,
+		About:   u.About,
+	}
 }

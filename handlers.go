@@ -28,7 +28,7 @@ func (s *server) handleFeed(feed, path, title string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 
-		ids, err := s.hn.getFeedIDs(r.Context(), feed)
+		items, hasMore, err := s.hn.getFeedPage(r.Context(), feed, page)
 		if err != nil {
 			s.render(w, r, feed, title, "feed", feedPageData{
 				Feed:  feed,
@@ -39,27 +39,14 @@ func (s *server) handleFeed(feed, path, title string) http.HandlerFunc {
 			return
 		}
 
-		start := (page - 1) * pageSize
-		if start >= len(ids) {
-			start = 0
-			page = 1
-		}
-		end := start + pageSize
-		if end > len(ids) {
-			end = len(ids)
-		}
-
-		items := s.hn.hydrateStories(r.Context(), ids[start:end])
 		stories := make([]storyView, 0, len(items))
-		rank := start + 1
+		rank := (page-1)*pageSize + 1
 		for _, item := range items {
 			if item == nil || item.Deleted || item.Dead {
 				rank++
 				continue
 			}
-
-			view := toStoryView(item, rank)
-			stories = append(stories, view)
+			stories = append(stories, toStoryView(item, rank))
 			rank++
 		}
 
@@ -72,7 +59,7 @@ func (s *server) handleFeed(feed, path, title string) http.HandlerFunc {
 			Feed:    feed,
 			Path:    path,
 			Page:    page,
-			HasMore: end < len(ids),
+			HasMore: hasMore,
 			Stories: stories,
 		}, seoData{
 			Description:  descriptions[feed],
@@ -89,7 +76,9 @@ func (s *server) handleItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := s.hn.getItem(r.Context(), id)
+	// getItemTree fetches the story and its full comment tree in one request,
+	// pre-warming the item cache so comment expansion needs no extra API calls.
+	item, err := s.hn.getItemTree(r.Context(), id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -214,7 +203,7 @@ func (s *server) handleItemComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := s.hn.getItem(r.Context(), id)
+	item, err := s.hn.getItemTree(r.Context(), id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -566,38 +555,6 @@ func buildUserJSONLD(user *hnUser) template.HTML {
 	return template.HTML(b)
 }
 
-func (s *server) filterSubmittedIDs(ctx context.Context, submitted []int, offset int, limit int, keep func(*hnItem) bool) ([]*hnItem, bool) {
-	result := make([]*hnItem, 0, limit)
-	pos := offset
-
-	for len(result) < limit && pos < len(submitted) {
-		end := pos + userSubmissionBatchSize
-		if end > len(submitted) {
-			end = len(submitted)
-		}
-
-		items := s.hn.hydrateStories(ctx, submitted[pos:end])
-		for _, item := range items {
-			if item == nil || item.Deleted || item.Dead {
-				continue
-			}
-			if keep(item) {
-				result = append(result, item)
-				if len(result) >= limit {
-					break
-				}
-			}
-		}
-		pos = end
-	}
-
-	hasMore := pos < len(submitted) || len(result) > limit
-	if len(result) > limit {
-		result = result[:limit]
-	}
-
-	return result, hasMore
-}
 
 func (s *server) handleUserSubmissions(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
@@ -614,22 +571,12 @@ func (s *server) handleUserSubmissions(w http.ResponseWriter, r *http.Request) {
 
 	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 
-	skip := (page - 1) * userPageSize
-	needed := skip + userPageSize + 1
-
-	items, _ := s.filterSubmittedIDs(r.Context(), user.Submitted, 0, needed, func(item *hnItem) bool {
-		return item.Type != "comment"
-	})
-
-	hasMore := len(items) > skip+userPageSize
-	if skip >= len(items) {
+	// getUserStories replaces the old getUser+filterSubmittedIDs pattern:
+	// a single Algolia search returns the paginated stories directly.
+	items, hasMore, err := s.hn.getUserStories(r.Context(), user.ID, page)
+	if err != nil {
 		items = nil
-	} else {
-		end := skip + userPageSize
-		if end > len(items) {
-			end = len(items)
-		}
-		items = items[skip:end]
+		hasMore = false
 	}
 
 	stories := make([]storyView, 0, len(items))
@@ -664,22 +611,13 @@ func (s *server) handleUserComments(w http.ResponseWriter, r *http.Request) {
 
 	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
 
-	skip := (page - 1) * userPageSize
-	needed := skip + userPageSize + 1
-
-	items, _ := s.filterSubmittedIDs(r.Context(), user.Submitted, 0, needed, func(item *hnItem) bool {
-		return item.Type == "comment"
-	})
-
-	hasMore := len(items) > skip+userPageSize
-	if skip >= len(items) {
+	// getUserComments replaces the old getUser+filterSubmittedIDs pattern.
+	// Algolia search results include story_id/story_title so we avoid
+	// getRootStory traversal for most comments.
+	items, hasMore, err := s.hn.getUserComments(r.Context(), user.ID, page)
+	if err != nil {
 		items = nil
-	} else {
-		end := skip + userPageSize
-		if end > len(items) {
-			end = len(items)
-		}
-		items = items[skip:end]
+		hasMore = false
 	}
 
 	comments := make([]userCommentView, 0, len(items))
@@ -700,7 +638,12 @@ func (s *server) handleUserComments(w http.ResponseWriter, r *http.Request) {
 				TimeAgo: timeAgo(item.Time),
 				Text:    template.HTML(item.Text),
 			}
-			if root := s.hn.getRootStory(r.Context(), item); root != nil {
+			// Algolia provides story_id/story_title directly on comment hits,
+			// so we can skip the parent-chain traversal in most cases.
+			if item.StoryID != 0 {
+				cv.OnTitle = item.StoryTitle
+				cv.OnID = item.StoryID
+			} else if root := s.hn.getRootStory(r.Context(), item); root != nil {
 				cv.OnTitle = root.Title
 				cv.OnID = root.ID
 			}
