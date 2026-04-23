@@ -11,10 +11,8 @@ const (
 )
 
 const (
-	feedHydrateWorkers  = 8
-	commentFetchWorkers = 24
-	maxCommentNodes     = 50
-	rootStoryMaxDepth   = 5
+	feedHydrateWorkers = 8
+	rootStoryMaxDepth  = 5
 )
 
 const (

@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -325,19 +324,35 @@ func (s *server) loadComments(ctx context.Context, storyID int, ids []int, sortM
 func (s *server) loadCommentChildren(ctx context.Context, storyID, commentID, parentDepth int, sortMode string) ([]*commentView, string) {
 	cacheKey := fmt.Sprintf("comment-children:%d:%d:%d:%s", storyID, commentID, parentDepth, sortMode)
 	value, err := s.commentsCache.getOrLoad(ctx, cacheKey, ttlCommentTree, func(ctx context.Context) (any, error) {
-		parent, err := s.hn.getItem(ctx, commentID)
-		if err != nil || parent == nil {
+		tree, err := s.algolia.getItemTree(ctx, storyID)
+		if err != nil {
 			return struct {
 				Comments []*commentView
 				Error    string
 			}{Error: "Unable to load replies right now."}, nil
 		}
 
-		children, childrenErr := s.loadCommentsFresh(ctx, storyID, parent.Kids, sortMode, parentDepth)
+		nodesByID := make(map[int]*algoliaItem)
+		flattenAlgoliaTree(tree, nodesByID)
+
+		parent, ok := nodesByID[commentID]
+		if !ok || parent == nil {
+			return struct {
+				Comments []*commentView
+				Error    string
+			}{Error: "Unable to load replies right now."}, nil
+		}
+
+		childIDs := make([]int, len(parent.Children))
+		for i, c := range parent.Children {
+			childIDs[i] = c.ID
+		}
+
+		children := buildAlgoliaCommentTree(childIDs, nodesByID, parentDepth, storyID, sortMode)
 		return struct {
 			Comments []*commentView
 			Error    string
-		}{Comments: children, Error: childrenErr}, nil
+		}{Comments: children}, nil
 	})
 	if err != nil {
 		return nil, "Unable to load replies right now."
@@ -350,11 +365,20 @@ func (s *server) loadCommentChildren(ctx context.Context, storyID, commentID, pa
 	return payload.Comments, payload.Error
 }
 
+// loadCommentsFresh fetches the full comment tree for storyID from the Algolia API
+// (a single HTTP request), then selects the top-level comments identified by ids
+// and converts them to commentViews recursively.
 func (s *server) loadCommentsFresh(ctx context.Context, storyID int, ids []int, sortMode string, baseDepth int) ([]*commentView, string) {
-	const eagerDepth = 2
+	tree, err := s.algolia.getItemTree(ctx, storyID)
+	if err != nil {
+		return nil, "Unable to load comments right now."
+	}
 
-	itemsByID, _ := s.fetchCommentItems(ctx, ids, maxCommentNodes)
-	comments := s.buildCommentTree(ids, itemsByID, baseDepth, baseDepth+eagerDepth, storyID, sortMode)
+	// Build a lookup map from the flat Algolia tree so we can find nodes by ID.
+	nodesByID := make(map[int]*algoliaItem)
+	flattenAlgoliaTree(tree, nodesByID)
+
+	comments := buildAlgoliaCommentTree(ids, nodesByID, baseDepth, storyID, sortMode)
 	if sortMode == "new" {
 		sortCommentsByNewest(comments)
 	}
@@ -362,142 +386,50 @@ func (s *server) loadCommentsFresh(ctx context.Context, storyID int, ids []int, 
 	return comments, ""
 }
 
-func (s *server) fetchCommentItems(ctx context.Context, ids []int, maxNodes int) (map[int]*hnItem, bool) {
-	if len(ids) == 0 || maxNodes <= 0 {
-		return map[int]*hnItem{}, false
+// flattenAlgoliaTree walks the nested Algolia tree and populates a flat id→node map.
+func flattenAlgoliaTree(node *algoliaItem, out map[int]*algoliaItem) {
+	if node == nil {
+		return
 	}
-
-	workers := commentFetchWorkers
-	if maxNodes < workers {
-		workers = maxNodes
+	out[node.ID] = node
+	for _, child := range node.Children {
+		flattenAlgoliaTree(child, out)
 	}
-
-	itemsByID := make(map[int]*hnItem, maxNodes)
-	seen := make(map[int]struct{}, maxNodes)
-	jobs := make(chan int, workers*2)
-	done := make(chan struct{})
-	var doneOnce sync.Once
-
-	var mu sync.Mutex
-	var workerWG sync.WaitGroup
-
-	scheduled := 0
-	truncated := false
-	pending := int64(0)
-
-	enqueue := func(id int) {
-		if id <= 0 {
-			return
-		}
-
-		mu.Lock()
-		if _, exists := seen[id]; exists {
-			mu.Unlock()
-			return
-		}
-		if scheduled >= maxNodes {
-			truncated = true
-			mu.Unlock()
-			return
-		}
-		seen[id] = struct{}{}
-		scheduled++
-		mu.Unlock()
-
-		atomic.AddInt64(&pending, 1)
-
-		select {
-		case <-ctx.Done():
-			if atomic.AddInt64(&pending, -1) == 0 {
-				doneOnce.Do(func() { close(done) })
-			}
-		case jobs <- id:
-		}
-	}
-
-	for range workers {
-		workerWG.Add(1)
-		go func() {
-			defer workerWG.Done()
-			for id := range jobs {
-				item, err := s.hn.getItem(ctx, id)
-				if err == nil && item != nil && item.Type == "comment" {
-					mu.Lock()
-					itemsByID[id] = item
-					mu.Unlock()
-
-					for _, kidID := range item.Kids {
-						enqueue(kidID)
-					}
-				}
-				if atomic.AddInt64(&pending, -1) == 0 {
-					doneOnce.Do(func() { close(done) })
-				}
-			}
-		}()
-	}
-
-	for _, id := range ids {
-		enqueue(id)
-	}
-	if atomic.LoadInt64(&pending) == 0 {
-		doneOnce.Do(func() { close(done) })
-	}
-
-	select {
-	case <-done:
-	case <-ctx.Done():
-	}
-	close(jobs)
-	workerWG.Wait()
-
-	if ctx.Err() != nil {
-		truncated = true
-	}
-
-	return itemsByID, truncated
 }
 
-func (s *server) buildCommentTree(ids []int, itemsByID map[int]*hnItem, depth, depthLimit, storyID int, sortMode string) []*commentView {
+// buildAlgoliaCommentTree converts a slice of comment IDs into commentViews using
+// the pre-fetched Algolia node map. Children are rendered recursively.
+func buildAlgoliaCommentTree(ids []int, nodesByID map[int]*algoliaItem, depth, storyID int, sortMode string) []*commentView {
 	if len(ids) == 0 {
 		return nil
 	}
 
 	out := make([]*commentView, 0, len(ids))
 	for _, id := range ids {
-		item, ok := itemsByID[id]
-		if !ok || item == nil || item.Type != "comment" {
+		node, ok := nodesByID[id]
+		if !ok || node == nil || node.Type != "comment" {
 			continue
 		}
 
-		node := &commentView{
-			ID:      item.ID,
+		cv := &commentView{
+			ID:      node.ID,
 			StoryID: storyID,
-			By:      fallback(item.By, "unknown"),
-			Created: item.Time,
-			TimeAgo: timeAgo(item.Time),
-			Text:    template.HTML(item.Text),
+			By:      fallback(node.Author, "unknown"),
+			Created: node.CreatedAt,
+			TimeAgo: timeAgo(node.CreatedAt),
+			Text:    template.HTML(node.Text),
 			Depth:   depth,
-			Deleted: item.Deleted,
-			Dead:    item.Dead,
 		}
 
-		if len(item.Kids) > 0 {
-			if depth+1 >= depthLimit {
-				node.HasMoreChildren = true
-				node.HiddenChildren = len(item.Kids)
-				node.ExpandPath = fmt.Sprintf("/item/%d/comment/%d/children?sort=%s&depth=%d", storyID, item.ID, sortMode, depth+1)
-			} else {
-				node.Children = s.buildCommentTree(item.Kids, itemsByID, depth+1, depthLimit, storyID, sortMode)
-				if len(node.Children) < len(item.Kids) {
-					node.HasMoreChildren = true
-					node.HiddenChildren = len(item.Kids) - len(node.Children)
-					node.ExpandPath = fmt.Sprintf("/item/%d/comment/%d/children?sort=%s&depth=%d", storyID, item.ID, sortMode, depth+1)
-				}
+		if len(node.Children) > 0 {
+			childIDs := make([]int, len(node.Children))
+			for i, c := range node.Children {
+				childIDs[i] = c.ID
 			}
+			cv.Children = buildAlgoliaCommentTree(childIDs, nodesByID, depth+1, storyID, sortMode)
 		}
 
-		out = append(out, node)
+		out = append(out, cv)
 	}
 
 	return out

@@ -29,6 +29,7 @@ func newServer() *server {
 
 	return &server{
 		hn:            newHNClient(),
+		algolia:       newAlgoliaClient(),
 		github:        newGitHubClient(githubRepo),
 		tmpl:          tmpl,
 		commentsCache: newCommentsMemoryCache(),

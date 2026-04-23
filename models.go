@@ -123,6 +123,7 @@ type layoutData struct {
 
 type server struct {
 	hn            *hnClient
+	algolia       *algoliaClient
 	github        *githubClient
 	tmpl          *template.Template
 	commentsCache *memoryCache
