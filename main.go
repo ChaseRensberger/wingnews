@@ -1,12 +1,14 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 )
 
 func main() {
+	setupLogger()
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
@@ -15,8 +17,9 @@ func main() {
 	s := newServer()
 	r := newRouter(s)
 
-	log.Println("wingnews listening on :" + port)
+	slog.Info("server starting", "port", port)
 	if err := http.ListenAndServe(":"+port, r); err != nil {
-		log.Fatal(err)
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
 	}
 }

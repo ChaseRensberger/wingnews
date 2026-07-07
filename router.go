@@ -14,7 +14,9 @@ import (
 func newRouter(s *server) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Recoverer)
+	r.Use(requestIDMiddleware)
+	r.Use(requestLoggingMiddleware)
+	r.Use(recoverMiddleware)
 	r.Use(middleware.Compress(5, "text/html", "text/css", "application/javascript", "text/plain", "application/xml"))
 
 	r.Get("/debug/stats", handleDebugStats)

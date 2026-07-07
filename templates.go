@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"html/template"
+	"log/slog"
 	"net/http"
 )
 
@@ -39,6 +40,7 @@ func newServer() *server {
 func (s *server) render(w http.ResponseWriter, r *http.Request, active, title, bodyTemplate string, data any, seo ...seoData) {
 	var body bytes.Buffer
 	if err := s.tmpl.ExecuteTemplate(&body, bodyTemplate, data); err != nil {
+		slog.Error("template render failed", append(requestAttrs(r), "template", bodyTemplate, "error", err)...)
 		http.Error(w, "template render failed", http.StatusInternalServerError)
 		return
 	}
@@ -67,6 +69,7 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, active, title, b
 		layout.GitHubStars = formatStarCount(stars)
 	}
 	if err := s.tmpl.ExecuteTemplate(w, "layout", layout); err != nil {
+		slog.Error("template render failed", append(requestAttrs(r), "template", "layout", "error", err)...)
 		http.Error(w, "template render failed", http.StatusInternalServerError)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -36,12 +37,14 @@ func (c *hnClient) fetchJSON(ctx context.Context, path string, out any) error {
 	resp, err := c.http.Do(req)
 	if err != nil {
 		metrics.hnFetchErrors.Add(1)
+		slog.Warn("hn fetch failed", "path", path, "error", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		metrics.hnFetchErrors.Add(1)
+		slog.Warn("hn fetch returned non-ok status", "path", path, "status", resp.StatusCode)
 		return fmt.Errorf("upstream status %d", resp.StatusCode)
 	}
 

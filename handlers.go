@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -236,6 +237,7 @@ func (s *server) handleItemComments(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "comments", data); err != nil {
+		slog.Error("template render failed", append(requestAttrs(r), "template", "comments", "error", err)...)
 		http.Error(w, "template render failed", http.StatusInternalServerError)
 	}
 }
@@ -263,6 +265,7 @@ func (s *server) handleCommentChildren(w http.ResponseWriter, r *http.Request) {
 		"Comments":      children,
 		"CommentsError": childrenErr,
 	}); err != nil {
+		slog.Error("template render failed", append(requestAttrs(r), "template", "commentChildren", "error", err)...)
 		http.Error(w, "template render failed", http.StatusInternalServerError)
 	}
 }
@@ -297,6 +300,7 @@ func (s *server) handleMoreComments(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl.ExecuteTemplate(w, "moreComments", data); err != nil {
+		slog.Error("template render failed", append(requestAttrs(r), "template", "moreComments", "error", err)...)
 		http.Error(w, "template render failed", http.StatusInternalServerError)
 	}
 }

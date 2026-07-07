@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,12 +38,14 @@ func (c *githubClient) getRepoStars(ctx context.Context) (int, error) {
 		resp, err := c.http.Do(req)
 		if err != nil {
 			metrics.githubFetchErrors.Add(1)
+			slog.Warn("github fetch failed", "repo", c.repo, "error", err)
 			return nil, err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			metrics.githubFetchErrors.Add(1)
+			slog.Warn("github fetch returned non-ok status", "repo", c.repo, "status", resp.StatusCode)
 			return nil, fmt.Errorf("github api status %d", resp.StatusCode)
 		}
 

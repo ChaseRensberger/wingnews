@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -58,12 +59,14 @@ func (c *algoliaClient) getItemTree(ctx context.Context, id int) (*algoliaItem, 
 		resp, err := c.http.Do(req)
 		if err != nil {
 			metrics.hnFetchErrors.Add(1)
+			slog.Warn("algolia fetch failed", "item_id", id, "error", err)
 			return nil, err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			metrics.hnFetchErrors.Add(1)
+			slog.Warn("algolia fetch returned non-ok status", "item_id", id, "status", resp.StatusCode)
 			return nil, fmt.Errorf("algolia upstream status %d", resp.StatusCode)
 		}
 
