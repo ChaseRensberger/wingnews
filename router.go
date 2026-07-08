@@ -19,6 +19,7 @@ func newRouter(s *server) http.Handler {
 	r.Use(recoverMiddleware)
 	r.Use(middleware.Compress(5, "text/html", "text/css", "application/javascript", "text/plain", "application/xml"))
 
+	r.Get("/health", handleHealth)
 	r.Get("/debug/stats", handleDebugStats)
 
 	r.Group(func(r chi.Router) {
@@ -54,6 +55,12 @@ func newRouter(s *server) http.Handler {
 	})
 
 	return r
+}
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write([]byte(`{"status":"ok"}`))
 }
 
 func staticCacheControl(next http.Handler) http.Handler {
